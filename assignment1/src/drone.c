@@ -193,9 +193,9 @@ int main(int argc, char *argv[]) {
         // SEND UPDATED POSITION
         // -------------------------------
         send_position(msg, (int)drn.x, (int)drn.y, fd_out);
-        msg.type = MSG_TYPE_FORCE;
-        sprintf(msg.data, sizeof(msg.data), "%f %f", drn.Fx, drn.Fy);
-        write(fd_out, msg.data, sizeof(msg.data));
+        /*msg.type = MSG_TYPE_FORCE;
+        snprintf(msg.data, sizeof(msg.data), "%f %f", drn.Fx, drn.Fy);
+        write(fd_out, msg.data, sizeof(msg.data));*/
 
         usleep(1000);
     }

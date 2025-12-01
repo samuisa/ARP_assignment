@@ -1,19 +1,13 @@
-[2025-12-01 11:42:17] (PID 877)  [MAIN] PROGRAM STARTED
-[2025-12-01 11:42:17] (PID 877)  [MAIN] Main program running
-[2025-12-01 11:42:17] (PID 879) [OBST] Avviato (fd_in=9, fd_out=12)
-[2025-12-01 11:42:17] (PID 880) [TARG] Avviato (fd_in=13, fd_out=16)
-[2025-12-01 11:42:18] (PID 887)  [WIN] main avviato
-[2025-12-01 11:42:18] (PID 880) [TARG] Ricevute dimensioni finestra 112x38
-[2025-12-01 11:42:18] (PID 882) [DRONE] Initial drone position: (x = 56.000000, y = 19.000000)
+[2025-12-01 18:06:14] (PID 1235)  [MAIN] PROGRAM STARTED
+[2025-12-01 18:06:14] (PID 1235)  [MAIN] Main program running
+[2025-12-01 18:06:14] (PID 1237) [OBST] Avviato (fd_in=11, fd_out=14)
+[2025-12-01 18:06:14] (PID 1238) [TARG] Avviato (fd_in=15, fd_out=18)
+[2025-12-01 18:06:14] (PID 1246)  [WIN] main avviato
+[2025-12-01 18:06:14] (PID 1238) [TARG] Ricevute dimensioni finestra 112x38
+[2025-12-01 18:06:14] (PID 1237) [OBST] Generati 20 ostacoli per grid 112x38
+[2025-12-01 18:06:14] (PID 1240) [DRONE] Initial drone position: (x = 56.000000, y = 19.000000)
 
-[2025-12-01 11:42:18] (PID 879) [OBST] Generati 20 ostacoli per grid 112x38
-[2025-12-01 11:42:18] (PID 879) [OBST] Inviati 20 ostacoli a window (width=112 height=38)
-[2025-12-01 11:42:18] (PID 880) [TARG] Ricevuti 20 ostacoli
-[2025-12-01 11:42:18] (PID 880) [TARG] Generati 4 target per grid 112x38
-[2025-12-01 11:42:18] (PID 880) [TARG] Inviati 4 target a window
-[2025-12-01 11:42:33] (PID 887)  [WIN] main terminato
-[2025-12-01 11:42:34] (PID 879) [OBST] Pipe chiusa da window, termino.
-[2025-12-01 11:42:34] (PID 880) [TARG] Pipe chiusa da window, termino.
-[2025-12-01 11:42:34] (PID 880) [TARG] Terminato correttamente.
-[2025-12-01 11:42:34] (PID 879) [OBST] Terminato correttamente.
-[2025-12-01 11:42:34] (PID 877)  [MAIN] PROGRAM EXIT
+[2025-12-01 18:06:14] (PID 1238) [TARG] Ricevuti 20 ostacoli
+[2025-12-01 18:06:14] (PID 1237) [OBST] Inviati 20 ostacoli a window (width=112 height=38)
+[2025-12-01 18:06:14] (PID 1238) [TARG] Generati 4 target per grid 112x38
+[2025-12-01 18:06:14] (PID 1238) [TARG] Inviati 4 target a window
