@@ -34,7 +34,7 @@ int main() {
     ensureLogsDir();
     logMessage(LOG_PATH, " [MAIN] PROGRAM STARTED");
 
-    // ---- PIPE ----
+    // -- PIPE --
     int pipe_input_window[2];
     //int pipe_window_input[2];
     int pipe_window_drone[2];
