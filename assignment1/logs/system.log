@@ -1,18 +1,41 @@
-[2025-12-04 17:12:43] (PID 13331) [MAIN] PROGRAM STARTED
-[2025-12-04 17:12:43] (PID 13331) [MAIN] Main program running
-[2025-12-04 17:12:43] (PID 13333) [OBST] Avviato (fd_in=9, fd_out=12)
-[2025-12-04 17:12:43] (PID 13334) [TARG] Avviato (fd_in=13, fd_out=16)
-[2025-12-04 17:12:44] (PID 13349) [BB] main avviato
-[2025-12-04 17:12:44] (PID 13333) [OBST] Generati 13 ostacoli per grid 100x28
-[2025-12-04 17:12:44] (PID 13333) [OBST] Inviati 13 ostacoli a blackboard (width=100 height=28)
-[2025-12-04 17:12:44] (PID 13334) [TARG] Ricevute dimensioni finestra 100x28
-[2025-12-04 17:12:44] (PID 13334) [TARG] Ricevuti 13 ostacoli
-[2025-12-04 17:12:44] (PID 13334) [TARG] Generati 3 target per grid 100x28
-[2025-12-04 17:12:44] (PID 13334) [TARG] Inviati 3 target a blackboard
-[2025-12-04 17:12:44] (PID 13336) [DRONE] Initial drone position: (x = 50.000000, y = 14.000000)
-[2025-12-04 17:13:22] (PID 13349) [BB] main terminato
-[2025-12-04 17:13:22] (PID 13334) [TARG] Pipe chiusa da blackboard, termino.
-[2025-12-04 17:13:22] (PID 13333) [OBST] Pipe chiusa da blackboard, termino.
-[2025-12-04 17:13:22] (PID 13333) [OBST] Terminato correttamente.
-[2025-12-04 17:13:22] (PID 13334) [TARG] Terminato correttamente.
-[2025-12-04 17:13:22] (PID 13331) [MAIN] PROGRAM EXIT
+[2025-12-04 16:10:20] (PID 33911) [MAIN] PROGRAM STARTED
+[2025-12-04 16:10:20] (PID 33911) [MAIN] Main program running
+[2025-12-04 16:10:20] (PID 33914) [TARG] Avviato (fd_in=13, fd_out=16)
+[2025-12-04 16:10:20] (PID 33913) [OBST] Avviato (fd_in=9, fd_out=12)
+[2025-12-04 16:10:20] (PID 33948) [BB] main avviato
+[2025-12-04 16:10:20] (PID 33913) [OBST] Generati 12 ostacoli per grid 66x40
+[2025-12-04 16:10:20] (PID 33914) [TARG] Ricevute dimensioni finestra 66x40
+[2025-12-04 16:10:20] (PID 33913) [OBST] Inviati 12 ostacoli a blackboard (width=66 height=40)
+[2025-12-04 16:10:20] (PID 33914) [TARG] Ricevuti 12 ostacoli
+[2025-12-04 16:10:20] (PID 33916) [DRONE] Initial drone position: (x = 33.000000, y = 20.000000)
+[2025-12-04 16:10:20] (PID 33914) [TARG] Generati 2 target per grid 66x40
+[2025-12-04 16:10:20] (PID 33914) [TARG] Inviati 2 target a blackboard
+[2025-12-04 16:10:31] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -1.000000
+[2025-12-04 16:10:32] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -2.000000
+[2025-12-04 16:10:32] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -3.000000
+[2025-12-04 16:10:33] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -4.000000
+[2025-12-04 16:10:33] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -5.000000
+[2025-12-04 16:10:33] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -6.000000
+[2025-12-04 16:10:33] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -7.000000
+[2025-12-04 16:10:35] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -8.000000
+[2025-12-04 16:10:35] (PID 33916) [DRONE] Input received, force updated, command: e, Fx = 0.000000, Fy = -8.972717
+[2025-12-04 16:10:36] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = 0.000000, Fy = 4.993912
+[2025-12-04 16:10:37] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = 0.000000, Fy = 2.496956
+[2025-12-04 16:10:37] (PID 33916) [DRONE] Input received, force updated, command: f, Fx = 1.000000, Fy = 2.496956
+[2025-12-04 16:10:38] (PID 33916) [DRONE] Input received, force updated, command: f, Fx = 2.000000, Fy = 2.496956
+[2025-12-04 16:10:38] (PID 33916) [DRONE] Input received, force updated, command: f, Fx = 3.000000, Fy = 2.496956
+[2025-12-04 16:10:38] (PID 33916) [DRONE] Input received, force updated, command: f, Fx = 4.000000, Fy = 2.496956
+[2025-12-04 16:10:39] (PID 33916) [DRONE] Input received, force updated, command: f, Fx = 5.000000, Fy = 2.496956
+[2025-12-04 16:10:39] (PID 33916) [DRONE] Input received, force updated, command: f, Fx = 6.000000, Fy = 2.496956
+[2025-12-04 16:10:42] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = -1.819712, Fy = -3.040447
+[2025-12-04 16:10:42] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = -0.909856, Fy = -1.520224
+[2025-12-04 16:10:42] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = 0.000000, Fy = -0.760112
+[2025-12-04 16:10:43] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = 0.000000, Fy = 0.000000
+[2025-12-04 16:10:43] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = 0.000000, Fy = 0.000000
+[2025-12-04 16:10:43] (PID 33916) [DRONE] Input received, force updated, command: d, Fx = 0.000000, Fy = 0.000000
+[2025-12-04 16:10:44] (PID 33948) [BB] main terminato
+[2025-12-04 16:10:44] (PID 33914) [TARG] Pipe chiusa da blackboard, termino.
+[2025-12-04 16:10:44] (PID 33913) [OBST] Pipe chiusa da blackboard, termino.
+[2025-12-04 16:10:44] (PID 33914) [TARG] Terminato correttamente.
+[2025-12-04 16:10:44] (PID 33913) [OBST] Terminato correttamente.
+[2025-12-04 16:10:45] (PID 33911) [MAIN] PROGRAM EXIT
