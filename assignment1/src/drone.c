@@ -15,9 +15,15 @@ static Point *targets = NULL;
 static int num_targets = 0;
 
 
-void send_position(Message msg, int x, int y, int fd_out){
+void send_position(Message msg, float x, float y, int fd_out){
     msg.type = MSG_TYPE_POSITION;
-    snprintf(msg.data, sizeof(msg.data), "%d %d", x, y);
+    snprintf(msg.data, sizeof(msg.data), "%f %f", x, y);
+    write(fd_out, &msg, sizeof(msg));
+}
+
+void send_forces(Message msg,  int fd_out, float drone_Fx, float drone_Fy, float obst_Fx, float obst_Fy, float wall_Fx, float wall_Fy){
+    msg.type = MSG_TYPE_FORCE;
+    snprintf(msg.data, sizeof(msg.data), "%f %f %f %f %f %f", drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
     write(fd_out, &msg, sizeof(msg));
 }
 
@@ -48,7 +54,7 @@ int main(int argc, char *argv[]) {
                         drn.x_1 = drn.x_2 = drn.x;
                         drn.y_1 = drn.y_2 = drn.y;
                         spawned = true;
-                        send_position(msg, (int)drn.x, (int)drn.y, fd_out);
+                        send_position(msg, drn.x, drn.y, fd_out);
                     }
                     break;
                 }
@@ -195,14 +201,24 @@ int main(int argc, char *argv[]) {
         drn.x = (DT*DT*totFx - drn.x_2 + (2 + K*DT)*drn.x_1) / (1 + K*DT);
         drn.y = (DT*DT*totFy - drn.y_2 + (2 + K*DT)*drn.y_1) / (1 + K*DT);
 
-        drn.Fx = totFx;
-        drn.Fy = totFy;
+        //drn.Fx = totFx;
+        //drn.Fy = totFy;
         
+        // Dopo aver calcolato drn.x e drn.y
+        for (int i = 0; i < num_obstacles; i++) {
+            if ((int)drn.x == obstacles[i].x && (int)drn.y == obstacles[i].y) {
+                // collisione: annullo il movimento
+                drn.x = drn.x_1;
+                drn.y = drn.y_1;
+                break;
+            }
+        }
 
         // -------------------------------
         // SEND UPDATED POSITION
         // -------------------------------
-        send_position(msg, (int)drn.x, (int)drn.y, fd_out);
+        send_position(msg, drn.x, drn.y, fd_out);
+        send_forces(msg, fd_out, drn.Fx, drn.Fy, repFx, repFy, repWallFx, repWallFy);
 
         usleep(1000);
     }

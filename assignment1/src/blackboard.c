@@ -9,40 +9,55 @@
 #include "app_common.h"
 #include "log.h"
 
-#define LOG_PATH "logs/system.log"
+static char last_status[256] = "";
 
-static int current_x = 1;
-static int current_y = 1;
+static float current_x = 1.0f;
+static float current_y = 1.0f;
+
 static Point *obstacles = NULL;
 static int num_obstacles = 0;
+
 static Point *targets = NULL;
 static int num_targets = 0;
 
-WINDOW* create_window(int height, int width, int starty, int startx) {
+static WINDOW *status_win = NULL;
+
+/* ======================= WINDOW UTILS ======================= */
+
+WINDOW* create_window(int height, int width, int starty, int startx)
+{
     WINDOW *win = newwin(height, width, starty, startx);
     keypad(win, TRUE);
     box(win, 0, 0);
-    wrefresh(win);
+    wnoutrefresh(win);
+    doupdate();
     return win;
 }
 
-void destroy_window(WINDOW *win) {
+void destroy_window(WINDOW *win)
+{
     if (!win) return;
-    wborder(win, ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ');
-    wrefresh(win);
+    werase(win);
+    wnoutrefresh(win);
+    doupdate();
     delwin(win);
 }
 
-void draw_content(WINDOW *win, int x, int y) {
+/* ======================= DRAWING ======================= */
+
+void draw_content(WINDOW *win)
+{
     werase(win);
     box(win, 0, 0);
+
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
     for (int i = 0; i < num_obstacles; i++) {
         int ox = obstacles[i].x;
         int oy = obstacles[i].y;
-        if (ox >= 0 && ox < max_x && oy >= 0 && oy < max_y) {
+        if (ox > 0 && ox < max_x - 1 &&
+            oy > 0 && oy < max_y - 1) {
             mvwprintw(win, oy, ox, "0");
         }
     }
@@ -50,22 +65,98 @@ void draw_content(WINDOW *win, int x, int y) {
     for (int i = 0; i < num_targets; i++) {
         int tx = targets[i].x;
         int ty = targets[i].y;
-        if (tx >= 0 && tx < max_x && ty >= 0 && ty < max_y) {
+        if (tx > 0 && tx < max_x - 1 &&
+            ty > 0 && ty < max_y - 1) {
             mvwprintw(win, ty, tx, "T");
         }
     }
-
-    if (x >= (max_x - 1)) x = max_x - 2;
-    if (y >= (max_y - 1)) y = max_y - 2;
-    if (x < 1) x = 1;
-    if (y < 1) y = 1;
-    mvwprintw(win, y, x, "+");
-    wrefresh(win);
 }
 
-void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ) {
-    Message msg;
+void draw_drone(WINDOW *win, float x, float y)
+{
+    int max_y, max_x;
+    getmaxyx(win, max_y, max_x);
 
+    int ix = (int)x;
+    int iy = (int)y;
+
+    if (ix >= max_x - 1) ix = max_x - 2;
+    if (iy >= max_y - 1) iy = max_y - 2;
+    if (ix < 1) ix = 1;
+    if (iy < 1) iy = 1;
+
+    draw_content(win);
+    mvwprintw(win, iy, ix, "+");
+
+    wnoutrefresh(win);
+    wnoutrefresh(status_win);
+    doupdate();
+}
+
+/* ======================= STATUS BAR ======================= */
+
+void update_dynamic(float x, float y,
+                    float drn_Fx, float drn_Fy,
+                    float obst_Fx, float obst_Fy,
+                    float wall_Fx, float wall_Fy)
+{
+    if (!status_win) return;
+
+    char buffer[256];
+    snprintf(buffer, sizeof(buffer),
+        "x=%.4f y=%.4f | drn(%.4f %.4f) | obst(%.4f %.4f) | wall(%.4f %.4f)",
+        x, y,
+        drn_Fx, drn_Fy,
+        obst_Fx, obst_Fy,
+        wall_Fx, wall_Fy
+    );
+
+    if (strcmp(buffer, last_status) != 0) {
+        strcpy(last_status, buffer);
+
+        werase(status_win);
+        mvwprintw(status_win, 0, 0, "%s", buffer);
+
+        wnoutrefresh(status_win);
+        doupdate();
+    }
+}
+
+/* ======================= RESIZE ======================= */
+
+void reposition_and_redraw(WINDOW **win_ptr)
+{
+    if (is_term_resized(LINES, COLS)) {
+        resize_term(0, 0);
+    }
+
+    int new_width  = COLS;
+    int new_height = LINES - 1;
+
+    int startx = 0;
+    int starty = 1;
+
+    if (*win_ptr != NULL) {
+        if (wresize(*win_ptr, new_height, new_width) == ERR ||
+            mvwin(*win_ptr, starty, startx) == ERR) {
+            destroy_window(*win_ptr);
+            *win_ptr = create_window(new_height, new_width, starty, startx);
+        }
+    } else {
+        *win_ptr = create_window(new_height, new_width, starty, startx);
+    }
+
+    werase(status_win);
+    box(*win_ptr, 0, 0);
+
+    draw_drone(*win_ptr, current_x, current_y);
+}
+
+/* ======================= IPC ======================= */
+
+void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ)
+{
+    Message msg;
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
@@ -74,7 +165,7 @@ void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ) {
 
     write(fd_drone, &msg, sizeof(msg));
     write(fd_obst,  &msg, sizeof(msg));
-    write(fd_targ, &msg, sizeof(msg));
+    write(fd_targ,  &msg, sizeof(msg));
 }
 
 void send_resize(WINDOW *win, int fd_drone){
@@ -87,30 +178,6 @@ void send_resize(WINDOW *win, int fd_drone){
     snprintf(msg.data, sizeof(msg.data), "%d %d", max_x, max_y);
 
     write(fd_drone, &msg, sizeof(msg));
-}
-
-void reposition_and_redraw(WINDOW **win_ptr) {
-    if (is_term_resized(LINES, COLS)) {
-        resize_term(0, 0);
-    }
-
-    int new_width = COLS;
-    int new_height = LINES;
-
-    int startx = (COLS - new_width) / 2;
-    int starty = (LINES - new_height) / 2;
-
-    if (*win_ptr != NULL) {
-        if (wresize(*win_ptr, new_height, new_width) == ERR ||
-            mvwin(*win_ptr, starty, startx) == ERR) {
-            destroy_window(*win_ptr);
-            *win_ptr = create_window(new_height, new_width, starty, startx);
-        }
-    } else {
-        *win_ptr = create_window(new_height, new_width, starty, startx);
-    }
-
-    draw_content(*win_ptr, current_x, current_y);
 }
 
 
@@ -127,6 +194,13 @@ int main(int argc, char *argv[]) {
     int fd_targ_write  = atoi(argv[6]);
     int fd_targ_read   = atoi(argv[7]);
 
+    float drn_Fx = 0.0f;
+    float drn_Fy = 0.0f;
+    float obst_Fx = 0.0f;
+    float obst_Fy = 0.0f;
+    float wall_Fx = 0.0f;
+    float wall_Fy = 0.0f;
+
     initscr();
     cbreak();
     noecho();
@@ -135,7 +209,8 @@ int main(int argc, char *argv[]) {
     timeout(0);
 
     logMessage(LOG_PATH, "[BB] main avviato");
-    WINDOW *win = create_window(HEIGHT, WIDTH, 0, 0);
+    status_win = newwin(1, COLS, 0, 0);
+    WINDOW *win = create_window(HEIGHT - 1, WIDTH, 1, 0);
     reposition_and_redraw(&win);
     send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
 
@@ -194,10 +269,23 @@ int main(int argc, char *argv[]) {
             if (n > 0) {
                 switch (msg.type) {
                     case MSG_TYPE_POSITION: {
-                        if (sscanf(msg.data, "%d %d", &current_x, &current_y) == 2) {
-                            draw_content(win, current_x, current_y);
+                        if (sscanf(msg.data, "%f %f", &current_x, &current_y) == 2) {
+                            draw_drone(win, current_x, current_y);
                         }
                         break;
+                    }
+
+                    case MSG_TYPE_FORCE: {
+                        if (sscanf(msg.data, "%f %f %f %f %f %f",
+                                &drn_Fx, &drn_Fy,
+                                &obst_Fx, &obst_Fy,
+                                &wall_Fx, &wall_Fy) == 6)
+                        {
+                            update_dynamic(current_x, current_y,
+                                            drn_Fx, drn_Fy,
+                                            obst_Fx, obst_Fy,
+                                            wall_Fx, wall_Fy);
+                        }
                     }
                     default:
                         break;
@@ -254,6 +342,8 @@ int main(int argc, char *argv[]) {
                 perror("read fd_obst_read");
                 break;
             }
+            draw_drone(win, current_x, current_y);
+
         }
 
         // ----- PIPE TARGET ------
@@ -298,18 +388,19 @@ int main(int argc, char *argv[]) {
                 perror("read fd_obst_read");
                 break;
             }
+            draw_drone(win, current_x, current_y);
         }
     }
 
-    // Pulizia finale
-    if (win != NULL) destroy_window(win);
-    endwin();
-    if (obstacles != NULL) free(obstacles);
+    if (win) destroy_window(win);
+    if (obstacles) free(obstacles);
+    if (targets) free(targets);
     close(fd_input_read);
     close(fd_drone_read);
     close(fd_drone_write);
     close(fd_obst_read);
     close(fd_obst_write);
     logMessage(LOG_PATH, "[BB] main terminato");
+    endwin();
     return 0;
 }
