@@ -195,8 +195,8 @@ int main(int argc, char *argv[]) {
         drn.x = (DT*DT*totFx - drn.x_2 + (2 + K*DT)*drn.x_1) / (1 + K*DT);
         drn.y = (DT*DT*totFy - drn.y_2 + (2 + K*DT)*drn.y_1) / (1 + K*DT);
 
-        //drn.Fx = totFx;
-        //drn.Fy = totFy;
+        drn.Fx = totFx;
+        drn.Fy = totFy;
         
 
         // -------------------------------
