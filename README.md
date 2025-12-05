@@ -43,11 +43,11 @@ Finally, it sends its updated position to the blackboard process.
 
 <br>**Additioinal Features**
 <br>As additional details for this project, a **Log File** and **Parameter Files** have been implemented.
-The **app_common.h** file is accessible from all processes and contains global variables and data structures, such as messages, the drone, and obstacles/targets. Conversely, the **app_blackboard.h** file is accessible only from the Blackboard process and contains the dimensions of the main window, which are sent to all other processes through pipes. This is necessary because the obstacle and target processes compute the number of items they must generate as a percentage of **WIDTH * SIZE**, and the drone process needs these dimensions to check whether the drone collides with the walls.
-The log files are useful for tracking the drone's behavior every time the user presses a key. Specifically, they are used to follow:
-- the key pressed by the user;
-- the new force that is applied to the drone.
+<br>The log files are useful for tracking the general behavior of each processes in real-time. 
 The parameter files store useful structs and system parameters necessary for the simulation processes.
+<br>The **app_common.h** file is accessible from all processes and contains global variables and data structures, such as messages, the drone, and obstacles/targets. 
+<br>Conversely, the **app_blackboard.h** file is accessible only from the Blackboard process and contains the dimensions of the main window, which are sent to all other processes through pipes. This is necessary because the obstacle and target processes compute the number of items they must generate as a percentage of **WIDTH * SIZE**, and the drone process needs these dimensions to check whether the drone collides with the walls.
+
 
 <br>**Project structure**
 
