@@ -2,6 +2,7 @@
 This project implements a simulation of a drone moving in a 2D environment.
 
 The architecture is composed of 5 separate processes that communicate using unnamed pipes. These processes manage the overall logic, user input, the drone itself, obstacles, and targets within the 2D environment. The communication is managed by the main process, which creates the pipes and the child processes.
+Our main processes, which have to manage more than one message at a time, use a select() call to efficiently monitor multiple file descriptors simultaneously. This allows each process to react only when new data becomes available on one of the pipes, avoiding unnecessary blocking enabling a responsive. Through this mechanism, the system can handle asynchronous interactions between components while maintaining low overhead and ensuring timely coordination among all processes.
 
 <div align="center">
   <img src="/images/windows.png" alt="Diagramma Architettura Drone" width="900"/>
@@ -42,15 +43,51 @@ Finally, it sends its updated position to the blackboard process.
 
 <br>**Additioinal Features**
 <br>As additional details for this project, a **Log File** and **Parameter Files** have been implemented.
-The log files are useful for tracking the drone's behavior every time the user presses a key. Specifically, they are used to follow:
-- the key pressed by the user;
-- the new force that is applied to the drone.
+<br>The log files are useful for tracking the general behavior of each processes in real-time. 
 The parameter files store useful structs and system parameters necessary for the simulation processes.
+<br>The **app_common.h** file is accessible from all processes and contains global variables and data structures, such as messages, the drone, and obstacles/targets. 
+<br>Conversely, the **app_blackboard.h** file is accessible only from the Blackboard process and contains the dimensions of the main window, which are sent to all other processes through pipes. This is necessary because the obstacle and target processes compute the number of items they must generate as a percentage of **WIDTH * SIZE**, and the drone process needs these dimensions to check whether the drone collides with the walls.
+
+
+<br>**Project structure**
+
+```bash
+.
+├── exec
+│   ├── blackboard
+│   ├── drone
+│   ├── input
+│   ├── main
+│   ├── obstacle
+│   └── target
+├── logs
+│   └── system.log
+├── Makefile
+├── obj
+│   └── log.o
+└── src
+    ├── app_blackboard.h
+    ├── app_common.h
+    ├── blackboard.c
+    ├── drone.c
+    ├── input.c
+    ├── log.c
+    ├── log.h
+    ├── main.c
+    ├── obstacle.c
+    └── target.c
+
+```
 
 **How to Run the simulation**
 
 To compile and launch the 2D Drone Simulation project, follow these steps in your terminal:
-- make
+```bash
+ make
+```
 <br>Once compiled, to execute the main program and open the separate ncurses windows (Input, Window/Blackboard):
-- make run
+
+```bash
+ make run
+```
 <br>The simulation should now be active, displaying the drone environment and the input legend.
