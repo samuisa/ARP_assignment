@@ -79,6 +79,39 @@ The parameter files store useful structs and system parameters necessary for the
     └── target.c
 ```
 
+```bash
+.
+├── assignment1
+│   ├── exec
+│   │   ├── blackboard
+│   │   ├── drone
+│   │   ├── input
+│   │   ├── main
+│   │   ├── obstacle
+│   │   └── target
+│   ├── logs
+│   │   └── system.log
+│   ├── Makefile
+│   ├── obj
+│   │   └── log.o
+│   └── src
+│       ├── app_blackboard.h
+│       ├── app_common.h
+│       ├── blackboard.c
+│       ├── drone.c
+│       ├── input.c
+│       ├── log.c
+│       ├── log.h
+│       ├── main.c
+│       ├── obstacle.c
+│       └── target.c
+├── images
+│   ├── ARP_diagramma.png
+│   ├── SketchARP.png
+│   └── windows.png
+└── README.md
+```
+
 
 **How to Run the simulation**
 
