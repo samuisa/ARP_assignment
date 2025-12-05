@@ -11,13 +11,16 @@
 #include "app_common.h"
 #include "log.h"
 
+/*====================================================================
+  GLOBAL VARIABLES
+======================================================================*/
 static Point *obstacles = NULL;
 static int num_obstacles = 0;
 
-/*--------------------------------------------------------------------
-  Genera un numero di ostacoli proporzionale alla dimensione della grid
----------------------------------------------------------------------*/
-
+/*====================================================================
+  GENERATE TARGETS
+  Generates a number of targets proportional to grid size, avoiding obstacles
+======================================================================*/
 Point* generate_targets(int width, int height,
                         Point* obstacles, int num_obstacles,
                         int* num_out) {
@@ -28,7 +31,7 @@ Point* generate_targets(int width, int height,
 
     Point* arr = malloc(sizeof(Point) * count);
     if (!arr) {
-        logMessage(LOG_PATH, "ERRORE malloc target: %s", strerror(errno));
+        logMessage(LOG_PATH, "[TARG] ERROR malloc target: %s", strerror(errno));
         exit(1);
     }
 
@@ -41,6 +44,7 @@ Point* generate_targets(int width, int height,
             arr[i].x = rand() % (width - 2) + 1;
             arr[i].y = rand() % (height - 2) + 1;
 
+            /* Avoid duplicates in targets */
             for (int j = 0; j < i; j++) {
                 if (arr[i].x == arr[j].x && arr[i].y == arr[j].y) {
                     valid = 0;
@@ -48,6 +52,7 @@ Point* generate_targets(int width, int height,
                 }
             }
 
+            /* Avoid overlap with obstacles */
             for (int j = 0; j < num_obstacles && valid; j++) {
                 if (arr[i].x == obstacles[j].x &&
                     arr[i].y == obstacles[j].y) {
@@ -59,17 +64,16 @@ Point* generate_targets(int width, int height,
         } while (!valid);
     }
 
-    logMessage(LOG_PATH, "[TARG] Generati %d target per grid %dx%d",
+    logMessage(LOG_PATH, "[TARG] Generated %d targets for grid %dx%d",
                count, width, height);
 
     *num_out = count;
     return arr;
 }
 
-/*--------------------------------------------------------------------
-   PROCESSO PRINCIPALE TARGETS
----------------------------------------------------------------------*/
-
+/*====================================================================
+  MAIN TARGET PROCESS
+======================================================================*/
 int main(int argc, char *argv[]) {
 
     if (argc < 3) {
@@ -80,58 +84,68 @@ int main(int argc, char *argv[]) {
     int fd_in  = atoi(argv[1]);
     int fd_out = atoi(argv[2]);
 
-    logMessage(LOG_PATH, "[TARG] Avviato (fd_in=%d, fd_out=%d)", fd_in, fd_out);
+    logMessage(LOG_PATH, "[TARG] Started (fd_in=%d, fd_out=%d)", fd_in, fd_out);
 
     int win_width = 0;
     int win_height = 0;
 
-
+    /*================== MAIN LOOP ==================*/
     while (1) {
 
+        /*--------------------------
+          Setup select() to read pipe
+        ---------------------------*/
         fd_set set;
         FD_ZERO(&set);
         FD_SET(fd_in, &set);
 
         int ret = select(fd_in + 1, &set, NULL, NULL, NULL);
         if (ret < 0) {
-            logMessage(LOG_PATH, "[TARG] ERRORE select(): %s", strerror(errno));
+            logMessage(LOG_PATH, "[TARG] ERROR select(): %s", strerror(errno));
             continue;
         }
 
+        /*--------------------------
+          Check if data is ready
+        ---------------------------*/
         if (FD_ISSET(fd_in, &set)) {
 
             Message msg;
             ssize_t n = read(fd_in, &msg, sizeof(msg));
 
             if (n == 0) {
-                logMessage(LOG_PATH, "[TARG] Pipe chiusa da blackboard, termino.");
+                logMessage(LOG_PATH, "[TARG] Pipe closed by blackboard, exiting.");
                 break;
             }
 
             if (n < 0) {
-                logMessage(LOG_PATH, "[TARG] ERRORE read(): %s", strerror(errno));
+                logMessage(LOG_PATH, "[TARG] ERROR read(): %s", strerror(errno));
                 continue;
             }
 
             if (n != sizeof(msg)) {
-                logMessage(LOG_PATH, "[TARG] WARNING read parziale (%zd bytes instead of %zu)", n, sizeof(msg));
+                logMessage(LOG_PATH,
+                           "[TARG] WARNING partial read (%zd bytes instead of %zu)",
+                           n, sizeof(msg));
                 continue;
             }
 
-            /*----------------------------------------------------------------
-               RICEVO LA DIMENSIONE DELLA FINESTRA
-            ----------------------------------------------------------------*/
-            
+            /*================================================================
+              RECEIVE WINDOW SIZE
+            =================================================================*/
             if (msg.type == MSG_TYPE_SIZE) {
 
                 if (sscanf(msg.data, "%d %d", &win_width, &win_height) != 2) {
-                    logMessage(LOG_PATH, "[TARG] ERRORE: dimensioni finestra non valide: '%s'", msg.data);
+                    logMessage(LOG_PATH, "[TARG] ERROR: invalid window size '%s'", msg.data);
                     continue;
                 }
 
-                logMessage(LOG_PATH, "[TARG] Ricevute dimensioni finestra %dx%d", win_width, win_height);
+                logMessage(LOG_PATH, "[TARG] Received window size %dx%d", win_width, win_height);
             }
 
+            /*================================================================
+              RECEIVE OBSTACLES
+            =================================================================*/
             if (msg.type == MSG_TYPE_OBSTACLES){
 
                 int count = 0;
@@ -144,15 +158,13 @@ int main(int argc, char *argv[]) {
 
                     obstacles = malloc(sizeof(Point) * count);
                     if (!obstacles) {
-                        logMessage(LOG_PATH, "[TARG] ERRORE allocazione ostacoli");
+                        logMessage(LOG_PATH, "[TARG] ERROR allocating obstacles");
                         break;
                     }
 
                     ssize_t n_read = read(fd_in, obstacles, sizeof(Point) * count);
                     if ((size_t)n_read != sizeof(Point) * (size_t)count) {
-
-                        logMessage(LOG_PATH, "[TARG] ERRORE lettura ostacoli (%zd bytes)", n_read);
-
+                        logMessage(LOG_PATH, "[TARG] ERROR reading obstacles (%zd bytes)", n_read);
                         free(obstacles);
                         obstacles = NULL;
                         num_obstacles = 0;
@@ -160,13 +172,12 @@ int main(int argc, char *argv[]) {
                     }
 
                     num_obstacles = count;
+                    logMessage(LOG_PATH, "[TARG] Received %d obstacles", num_obstacles);
 
-                    logMessage(LOG_PATH, "[TARG] Ricevuti %d ostacoli", num_obstacles);
-
-                    // -------------------------------------------------
-                    // ORA che ho sia finestra che ostacoli → genero target
-                    // -------------------------------------------------
-
+                    /*--------------------------
+                      GENERATE TARGETS
+                      Only if window size has been received
+                    ---------------------------*/
                     if (win_width > 0 && win_height > 0) {
 
                         int num_targ = 0;
@@ -176,6 +187,9 @@ int main(int argc, char *argv[]) {
                             &num_targ
                         );
 
+                        /*--------------------------
+                          SEND TARGETS TO BLACKBOARD
+                        ---------------------------*/
                         Message out_msg;
                         out_msg.type = MSG_TYPE_TARGETS;
                         snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targ);
@@ -183,20 +197,21 @@ int main(int argc, char *argv[]) {
                         write(fd_out, &out_msg, sizeof(out_msg));
                         write(fd_out, arr, sizeof(Point) * num_targ);
 
-                        logMessage(LOG_PATH, "[TARG] Inviati %d target a blackboard", num_targ);
+                        logMessage(LOG_PATH, "[TARG] Sent %d targets to blackboard", num_targ);
 
                         free(arr);
                     } else {
-                        logMessage(LOG_PATH, "[TARG] WARNING: dimensioni finestra non ancora ricevute");
+                        logMessage(LOG_PATH, "[TARG] WARNING: window size not yet received");
                     }
                 }
             }
         }
     }
 
+    /*================== CLEANUP ==================*/
     close(fd_in);
     close(fd_out);
 
-    logMessage(LOG_PATH, "[TARG] Terminato correttamente.");
+    logMessage(LOG_PATH, "[TARG] Terminated successfully.");
     return 0;
 }

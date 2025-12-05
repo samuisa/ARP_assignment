@@ -91,6 +91,8 @@ void draw_drone(WINDOW *win, float x, float y)
     wnoutrefresh(win);
     wnoutrefresh(status_win);
     doupdate();
+
+    logMessage(LOG_PATH, "[BB] Drone drawn at position: (%f, %f)", x, y);
 }
 
 /* ======================= STATUS BAR ======================= */
@@ -119,6 +121,10 @@ void update_dynamic(float x, float y,
 
         wnoutrefresh(status_win);
         doupdate();
+
+        logMessage(LOG_PATH,
+            "[BB] Dynamic update: position=(%f,%f) drn=(%f,%f) obst=(%f,%f) wall=(%f,%f)",
+            x, y, drn_Fx, drn_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
     }
 }
 
@@ -141,15 +147,19 @@ void reposition_and_redraw(WINDOW **win_ptr)
             mvwin(*win_ptr, starty, startx) == ERR) {
             destroy_window(*win_ptr);
             *win_ptr = create_window(new_height, new_width, starty, startx);
+            status_win = newwin(1, new_width, 0, 0);
         }
     } else {
         *win_ptr = create_window(new_height, new_width, starty, startx);
+        status_win = newwin(1, new_width, 0, 0);
     }
 
     werase(status_win);
     box(*win_ptr, 0, 0);
 
     draw_drone(*win_ptr, current_x, current_y);
+
+    logMessage(LOG_PATH, "[BB] Window resized/redrawn: width=%d height=%d", new_width, new_height);
 }
 
 /* ======================= IPC ======================= */
@@ -166,6 +176,8 @@ void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ)
     write(fd_drone, &msg, sizeof(msg));
     write(fd_obst,  &msg, sizeof(msg));
     write(fd_targ,  &msg, sizeof(msg));
+
+    logMessage(LOG_PATH, "[BB] Window size sent: width=%d height=%d", max_x, max_y);
 }
 
 void send_resize(WINDOW *win, int fd_drone){
@@ -178,14 +190,18 @@ void send_resize(WINDOW *win, int fd_drone){
     snprintf(msg.data, sizeof(msg.data), "%d %d", max_x, max_y);
 
     write(fd_drone, &msg, sizeof(msg));
+
+    logMessage(LOG_PATH, "[BB] Resize message sent: width=%d height=%d", max_x, max_y);
 }
 
+/* ======================= MAIN ======================= */
 
 int main(int argc, char *argv[]) {
     if (argc < 8) {
-        fprintf(stderr, "Usage: %s <pipe_fd_input_read> <fd_drone_read> <fd_drone_write> <fd_obst_read> <fd_obst_write>\n", argv[0]);
+        fprintf(stderr, "Usage: %s <pipe_fd_input_read> <fd_drone_read> <fd_drone_write> <fd_obst_read> <fd_obst_write> <fd_targ_write> <fd_targ_read>\n", argv[0]);
         return 1;
     }
+
     int fd_input_read  = atoi(argv[1]);
     int fd_drone_read  = atoi(argv[2]);
     int fd_drone_write = atoi(argv[3]);
@@ -194,12 +210,9 @@ int main(int argc, char *argv[]) {
     int fd_targ_write  = atoi(argv[6]);
     int fd_targ_read   = atoi(argv[7]);
 
-    float drn_Fx = 0.0f;
-    float drn_Fy = 0.0f;
-    float obst_Fx = 0.0f;
-    float obst_Fy = 0.0f;
-    float wall_Fx = 0.0f;
-    float wall_Fy = 0.0f;
+    float drn_Fx = 0.0f, drn_Fy = 0.0f;
+    float obst_Fx = 0.0f, obst_Fy = 0.0f;
+    float wall_Fx = 0.0f, wall_Fy = 0.0f;
 
     initscr();
     cbreak();
@@ -209,6 +222,7 @@ int main(int argc, char *argv[]) {
     timeout(0);
 
     logMessage(LOG_PATH, "[BB] main avviato");
+
     status_win = newwin(1, COLS, 0, 0);
     WINDOW *win = create_window(HEIGHT - 1, WIDTH, 1, 0);
     reposition_and_redraw(&win);
@@ -238,8 +252,10 @@ int main(int argc, char *argv[]) {
         if (fd_obst_read > maxfd) maxfd = fd_obst_read;
         if (fd_targ_read > maxfd) maxfd = fd_targ_read;
         maxfd += 1;
+
         tv.tv_sec  = 0;
         tv.tv_usec = 50000;
+
         int ret = select(maxfd, &readfds, NULL, NULL, &tv);
         if (ret < 0) {
             if (errno == EINTR) continue;
@@ -253,6 +269,7 @@ int main(int argc, char *argv[]) {
             ssize_t n = read(fd_input_read, buf, sizeof(buf)-1);
             if (n > 0) {
                 buf[n] = '\0';
+                logMessage(LOG_PATH, "[BB] Input pipe received: '%s'", buf);
                 if (buf[0] == 'q') break;
                 msg.type = MSG_TYPE_INPUT;
                 snprintf(msg.data, sizeof(msg.data), "%s", buf);
@@ -267,6 +284,7 @@ int main(int argc, char *argv[]) {
         if (FD_ISSET(fd_drone_read, &readfds)) {
             ssize_t n = read(fd_drone_read, &msg, sizeof(msg));
             if (n > 0) {
+                logMessage(LOG_PATH, "[BB] Drone message received: type=%d data='%s'", msg.type, msg.data);
                 switch (msg.type) {
                     case MSG_TYPE_POSITION: {
                         if (sscanf(msg.data, "%f %f", &current_x, &current_y) == 2) {
@@ -286,12 +304,12 @@ int main(int argc, char *argv[]) {
                                             obst_Fx, obst_Fy,
                                             wall_Fx, wall_Fy);
                         }
+                        break;
                     }
+
                     default:
                         break;
-                    
                 }
-                
             } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
                 perror("read fd_drone_read");
                 break;
@@ -302,14 +320,12 @@ int main(int argc, char *argv[]) {
         if (FD_ISSET(fd_obst_read, &readfds)) {
             ssize_t n = read(fd_obst_read, &msg, sizeof(msg));
             if (n > 0) {
+                logMessage(LOG_PATH, "[BB] Obstacles message received: type=%d data='%s'", msg.type, msg.data);
                 switch (msg.type) {
                     case MSG_TYPE_OBSTACLES: {
                         int count = 0;
                         if (sscanf(msg.data, "%d", &count) == 1 && count > 0) {
-                            if (obstacles != NULL) {
-                                free(obstacles);
-                                obstacles = NULL;
-                            }
+                            if (obstacles != NULL) free(obstacles);
                             obstacles = malloc(sizeof(Point) * count);
                             if (!obstacles) {
                                 fprintf(stderr, "Errore allocazione ostacoli\n");
@@ -323,6 +339,9 @@ int main(int argc, char *argv[]) {
                                 num_obstacles = 0;
                             } else {
                                 num_obstacles = count;
+                                for(int i=0;i<num_obstacles;i++)
+                                    logMessage(LOG_PATH, "[BB] Obstacle %d: (%f, %f)", i, obstacles[i].x, obstacles[i].y);
+
                                 Message out_msg;
                                 out_msg.type = MSG_TYPE_OBSTACLES;
                                 snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
@@ -338,39 +357,39 @@ int main(int argc, char *argv[]) {
                     default:
                         break;
                 }
+                draw_drone(win, current_x, current_y);
             } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
                 perror("read fd_obst_read");
                 break;
             }
-            draw_drone(win, current_x, current_y);
-
         }
 
         // ----- PIPE TARGET ------
         if (FD_ISSET(fd_targ_read, &readfds)){
             ssize_t n = read(fd_targ_read, &msg, sizeof(msg));
             if (n > 0) {
+                logMessage(LOG_PATH, "[BB] Targets message received: type=%d data='%s'", msg.type, msg.data);
                 switch (msg.type) {
                     case MSG_TYPE_TARGETS: {
                         int count = 0;
                         if (sscanf(msg.data, "%d", &count) == 1 && count > 0) {
-                            if (targets != NULL) {
-                                free(targets);
-                                targets = NULL;
-                            }
+                            if (targets != NULL) free(targets);
                             targets = malloc(sizeof(Point) * count);
                             if (!targets) {
-                                fprintf(stderr, "Errore allocazione ostacoli\n");
+                                fprintf(stderr, "Errore allocazione targets\n");
                                 break;
                             }
                             ssize_t n_read = read(fd_targ_read, targets, sizeof(Point) * count);
                             if ((size_t)n_read != sizeof(Point) * (size_t)count){
-                                fprintf(stderr, "Errore lettura ostacoli (bytes letti %zd)\n", n_read);
+                                fprintf(stderr, "Errore lettura targets (bytes letti %zd)\n", n_read);
                                 free(targets);
                                 targets = NULL;
                                 num_targets = 0;
                             } else {
                                 num_targets = count;
+                                for(int i=0;i<num_targets;i++)
+                                    logMessage(LOG_PATH, "[BB] Target %d: (%f, %f)", i, targets[i].x, targets[i].y);
+
                                 Message out_msg;
                                 out_msg.type = MSG_TYPE_TARGETS;
                                 snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
@@ -384,11 +403,11 @@ int main(int argc, char *argv[]) {
                     default:
                         break;
                 }
+                draw_drone(win, current_x, current_y);
             } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("read fd_obst_read");
+                perror("read fd_targ_read");
                 break;
             }
-            draw_drone(win, current_x, current_y);
         }
     }
 
@@ -400,6 +419,9 @@ int main(int argc, char *argv[]) {
     close(fd_drone_write);
     close(fd_obst_read);
     close(fd_obst_write);
+    close(fd_targ_read);
+    close(fd_targ_write);
+
     logMessage(LOG_PATH, "[BB] main terminato");
     endwin();
     return 0;
