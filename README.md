@@ -83,7 +83,12 @@ The parameter files store useful structs and system parameters necessary for the
 **How to Run the simulation**
 
 To compile and launch the 2D Drone Simulation project, follow these steps in your terminal:
+```bash
 - make
+```
 <br>Once compiled, to execute the main program and open the separate ncurses windows (Input, Window/Blackboard):
+
+```bash
 - make run
+```
 <br>The simulation should now be active, displaying the drone environment and the input legend.
