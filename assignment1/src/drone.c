@@ -261,6 +261,10 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // Changed
+        drn.Fx = totFx;
+        drn.Fy = totFy;
+
         // -------------------------------
         // SEND UPDATED POSITION + FORCES
         // -------------------------------
