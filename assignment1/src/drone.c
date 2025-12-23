@@ -11,12 +11,14 @@
 #include "app_common.h"
 #include "log.h"
 
+#define EPSILON 0.001f
+
 static Point *obstacles = NULL;
 static int num_obstacles = 0;
 static Point *targets = NULL;
 static int num_targets = 0;
 
-
+/* ======================= SEND FUNCTIONS ======================= */
 void send_position(Message msg, float x, float y, int fd_out){
     msg.type = MSG_TYPE_POSITION;
     snprintf(msg.data, sizeof(msg.data), "%f %f", x, y);
@@ -24,26 +26,64 @@ void send_position(Message msg, float x, float y, int fd_out){
     write(fd_out, &msg, sizeof(msg));
 }
 
-void send_forces(Message msg,  int fd_out, float drone_Fx, float drone_Fy, float obst_Fx, float obst_Fy, float wall_Fx, float wall_Fy){
+void send_forces(Message msg, int fd_out, float drone_Fx, float drone_Fy,
+                 float obst_Fx, float obst_Fy, float wall_Fx, float wall_Fy){
     msg.type = MSG_TYPE_FORCE;
-    snprintf(msg.data, sizeof(msg.data), "%f %f %f %f %f %f", drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
-    logMessage(LOG_PATH, "[DRONE] Sending forces: drone(%f,%f) obst(%f,%f) wall(%f,%f)", drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
+    snprintf(msg.data, sizeof(msg.data), "%f %f %f %f %f %f",
+             drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
+    logMessage(LOG_PATH, "[DRONE] Sending forces: drone(%f,%f) obst(%f,%f) wall(%f,%f)",
+               drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
     write(fd_out, &msg, sizeof(msg));
 }
 
-/*volatile sig_atomic_t running = 1;
+/* ======================= WATCHDOG PID ======================= */
+void send_pid(int fd_wd_write){
+    pid_t pid = getpid();
+    Message msg;
+    msg.type = MSG_TYPE_PID;
+    snprintf(msg.data, sizeof(msg.data), "%d", pid);
+    if(write(fd_wd_write, &msg, sizeof(msg)) < 0){
+        perror("[DRONE] write PID to watchdog");
+        exit(1);
+    }
+    logMessage(LOG_PATH, "[DRONE] PID sent to watchdog: %d", pid);
+}
 
-void handle_sigterm(int sig) {
-    (void)sig;        // evita warning
-    running = 0;      // SOLO questo
-}*/
+pid_t receive_watchdog_pid(int fd_wd_read){
+    Message msg;
+    ssize_t n;
+    pid_t pid_wd = -1;
 
-int main(int argc, char *argv[]) {
-    if (argc < 2) return 1;
+    do {
+        n = read(fd_wd_read, &msg, sizeof(msg));
+    } while(n < 0 && errno == EINTR);
 
-    int fd_in  = atoi(argv[1]);
-    int fd_out = atoi(argv[2]);
-    //pid_t watchdog_pid = atoi(argv[3]);
+    if(n <= 0){
+        perror("[DRONE] read watchdog PID");
+        exit(1);
+    }
+
+    if(msg.type == MSG_TYPE_PID){
+        sscanf(msg.data, "%d", &pid_wd);
+        logMessage(LOG_PATH, "[DRONE] Watchdog PID received: %d", pid_wd);
+    } else {
+        logMessage(LOG_PATH, "[DRONE] Unexpected message type from watchdog: %d", msg.type);
+    }
+
+    return pid_wd;
+}
+
+/* ======================= MAIN ======================= */
+int main(int argc, char *argv[]){
+    if(argc < 5){
+        fprintf(stderr, "Usage: %s <fd_in> <fd_out> <fd_watchdog_read> <fd_watchdog_write>\n", argv[0]);
+        return 1;
+    }
+
+    int fd_in       = atoi(argv[1]);
+    int fd_out      = atoi(argv[2]);
+    int fd_wd_read  = atoi(argv[3]);
+    int fd_wd_write = atoi(argv[4]);
 
     fcntl(fd_in, F_SETFL, O_NONBLOCK);
 
@@ -54,36 +94,24 @@ int main(int argc, char *argv[]) {
 
     logMessage(LOG_PATH, "[DRONE] Process started");
 
-    /*signal(SIGTERM, handle_sigterm);
-    signal(SIGINT,  handle_sigterm);
+    send_pid(fd_wd_write);
 
-    time_t last_heartbeat = 0;*/
+    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
 
-
-    while (1) {
-
-        /*time_t now = time(NULL);
-        if (now != last_heartbeat) {
-            kill(watchdog_pid, SIGUSR1);
-            last_heartbeat = now;
-        }*/
-
+    /* ================= LOOP PRINCIPALE ================= */
+    while(1){
         ssize_t n = read(fd_in, &msg, sizeof(Message));
-        if (n > 0) {
+        if(n > 0){
             logMessage(LOG_PATH, "[DRONE] Message received: type=%d, data='%s'", msg.type, msg.data);
 
-            switch (msg.type) {
-
+            switch(msg.type){
                 case MSG_TYPE_SIZE: {
-                    logMessage(LOG_PATH, "[DRONE] Window size message received: %s", msg.data);
-
                     sscanf(msg.data, "%d %d", &win_width, &win_height);
-                    logMessage(LOG_PATH, "[DRONE] Parsed window size: width=%d height=%d", win_width, win_height);
+                    logMessage(LOG_PATH, "[DRONE] Window size: width=%d height=%d", win_width, win_height);
 
                     if(!spawned){
-                        drn.x = win_width  / 2.0;
+                        drn.x = win_width / 2.0;
                         drn.y = win_height / 2.0;
-                        logMessage(LOG_PATH, "[DRONE] Initial drone position: (x = %f, y = %f)", drn.x, drn.y);
                         drn.x_1 = drn.x_2 = drn.x;
                         drn.y_1 = drn.y_2 = drn.y;
                         spawned = true;
@@ -96,11 +124,10 @@ int main(int argc, char *argv[]) {
                     char ch = msg.data[0];
                     logMessage(LOG_PATH, "[DRONE] Input received: '%c'", ch);
 
+                    if(ch == 'q') goto quit;
+
                     bool isValid = true;
-
-                    if (ch == 'q') goto quit;
-
-                    switch (ch) {
+                    switch(ch){
                         case 'e':  drn.Fy -= 1.0f; break;
                         case 'r':  drn.Fx += 1.0f; drn.Fy -= 1.0f; break;
                         case 'f':  drn.Fx += 1.0f; break;
@@ -109,184 +136,120 @@ int main(int argc, char *argv[]) {
                         case 'x':  drn.Fx -= 1.0f; drn.Fy += 1.0f; break;
                         case 's':  drn.Fx -= 1.0f; break;
                         case 'w':  drn.Fx -= 1.0f; drn.Fy -= 1.0f; break;
-
                         case 'd':
                             drn.Fx *= 0.5f;
                             drn.Fy *= 0.5f;
-                            
-                            if(fabs(drn.Fx) <= 0.5f){
-                                drn.Fx = 0.0f;
-                            }
-                            if(fabs(drn.Fy) <= 0.5f){
-                                drn.Fy = 0.0f;
-                            }
+                            if(fabs(drn.Fx) <= 0.5f) drn.Fx = 0.0f;
+                            if(fabs(drn.Fy) <= 0.5f) drn.Fy = 0.0f;
                             break;
-
-                        default:
-                            isValid = false;
-                            break;
+                        default: isValid = false; break;
                     }
 
-                    if(isValid){
-                        logMessage(LOG_PATH, "[DRONE] Updated forces after input '%c': Fx=%f Fy=%f", ch, drn.Fx, drn.Fy);
-                    }
-                    else{
-                        logMessage(LOG_PATH, "[DRONE] Input not recognized: '%c'", ch);
-                    }
-                    
+                    if(isValid)
+                        logMessage(LOG_PATH, "[DRONE] Forces updated: Fx=%f Fy=%f", drn.Fx, drn.Fy);
+                    else
+                        logMessage(LOG_PATH, "[DRONE] Unknown input: '%c'", ch);
+
                     break;
                 }
 
-                case MSG_TYPE_OBSTACLES: {
-                    logMessage(LOG_PATH, "[DRONE] Obstacles metadata received: %s", msg.data);
-
-                    int count;
-                    sscanf(msg.data, "%d", &count);
-                    logMessage(LOG_PATH, "[DRONE] Number of obstacles = %d", count);
-
-                    free(obstacles);
-                    obstacles = count ? malloc(sizeof(Point)*count) : NULL;
-                    num_obstacles = 0;
-
-                    if (obstacles) {
-                        if (read(fd_in, obstacles, sizeof(Point)*count) > 0) {
-                            num_obstacles = count;
-                            for(int i=0; i<count; i++)
-                                logMessage(LOG_PATH, "[DRONE] Obstacle %d at (%f, %f)", i, obstacles[i].x, obstacles[i].y);
-                        }
-                    }
-                    break;
+                case MSG_TYPE_OBSTACLES: { 
+                    logMessage(LOG_PATH, "[DRONE] Obstacles metadata received: %s", msg.data); 
+                    int count; 
+                    sscanf(msg.data, "%d", &count); 
+                    logMessage(LOG_PATH, "[DRONE] Number of obstacles = %d", count); 
+                    free(obstacles); 
+                    obstacles = count ? malloc(sizeof(Point)*count) : NULL; 
+                    num_obstacles = 0; 
+                    if (obstacles) { 
+                        if (read(fd_in, obstacles, sizeof(Point)*count) > 0) { 
+                            num_obstacles = count; 
+                            for(int i=0; i<count; i++){
+                                logMessage(LOG_PATH, "[DRONE] Obstacle %d at (%f, %f)", i, obstacles[i].x, obstacles[i].y); 
+                            }
+                        } 
+                    } 
+                    break; 
                 }
 
-                case MSG_TYPE_TARGETS: {
-                    logMessage(LOG_PATH, "[DRONE] Targets metadata received: %s", msg.data);
-
-                    int count;
-                    sscanf(msg.data, "%d", &count);
-                    logMessage(LOG_PATH, "[DRONE] Number of targets = %d", count);
-
-                    free(targets);
-                    targets = count ? malloc(sizeof(Point)*count) : NULL;
-                    num_targets = 0;
-
-                    if (targets) {
-                        if (read(fd_in, targets, sizeof(Point)*count) > 0) {
-                            num_targets = count;
-                            for(int i=0; i<count; i++)
+                case MSG_TYPE_TARGETS: { 
+                    logMessage(LOG_PATH, "[DRONE] Targets metadata received: %s", msg.data); 
+                    int count; 
+                    sscanf(msg.data, "%d", &count); 
+                    logMessage(LOG_PATH, "[DRONE] Number of targets = %d", count); 
+                    free(targets); targets = count ? malloc(sizeof(Point)*count) : NULL; 
+                    num_targets = 0; 
+                    if (targets) { 
+                        if (read(fd_in, targets, sizeof(Point)*count) > 0) { 
+                            num_targets = count; 
+                            for(int i=0; i<count; i++){ 
                                 logMessage(LOG_PATH, "[DRONE] Target %d at (%f, %f)", i, targets[i].x, targets[i].y);
-                        }
-                    }
-                    break;
+                            } 
+                        } 
+                    } 
+                    break; 
                 }
 
-                default:{
-                    logMessage(LOG_PATH, "[DRONE] Unknown message type received: %d", msg.type);
-                    break;
-                }
+                default: break;
             }
         }
 
-        // -------------------------------
-        // OBSTACLE POTENTIAL FIELD
-        // -------------------------------
-        logMessage(LOG_PATH, "[DRONE] Computing obstacle repulsive forces...");
+        /* ================= CALCOLO DELLE FORZE ================= */
+        float repFx=0.0f, repFy=0.0f, repWallFx=0.0f, repWallFy=0.0f;
 
-        float repFx = 0.0f, repFy = 0.0f;
-
-        for (int i = 0; i < num_obstacles; i++) {
+        // Ostacoli
+        for(int i=0; i<num_obstacles; i++){
             float dx = drn.x - (obstacles[i].x + 0.5);
             float dy = drn.y - (obstacles[i].y + 0.5);
-
-            float d = sqrt(dx*dx + dy*dy) - 0.5;
-
-            if (d < rho && d > 0.1) {
+            float d = sqrt(dx*dx + dy*dy) - 0.5f;
+            if(d < rho && d > 0.1f){
                 float F = eta * (1.0f/d - 1.0f/rho) / (d*d);
-
-                logMessage(LOG_PATH,
-                    "[DRONE] Obstacle %d: dx=%f dy=%f dist=%f -> F=(%f,%f)",
-                    i, dx, dy, d, F*dx/d, F*dy/d);
-
                 repFx += F * dx/d;
                 repFy += F * dy/d;
             }
         }
+        if(fabs(repFx) < EPSILON) repFx = 0.0f;
+        if(fabs(repFy) < EPSILON) repFy = 0.0f;
 
-        logMessage(LOG_PATH, "[DRONE] Total obstacle repulsion: repFx=%f repFy=%f", repFx, repFy);
-
-        if (fabs(repFx) < EPSILON) repFx = 0.0;
-        if (fabs(repFy) < EPSILON) repFy = 0.0;
-
-        // -------------------------------
-        // WALL POTENTIAL FIELD
-        // -------------------------------
-        float repWallFx = 0.0f, repWallFy = 0.0f;
-
+        // Muri
         float dR = (win_width-1) - drn.x;
         float dL = drn.x - 1;
         float dT = drn.y - 1;
         float dB = (win_height-1) - drn.y;
 
-        logMessage(LOG_PATH, "[DRONE] Wall distances: L=%f R=%f T=%f B=%f", dL, dR, dT, dB);
+        if(dR < rho) repWallFx -= eta * (1.0f/dR - 1.0f/rho)/(dR*dR);
+        if(dL < rho) repWallFx += eta * (1.0f/dL - 1.0f/rho)/(dL*dL);
+        if(dT < rho) repWallFy += eta * (1.0f/dT - 1.0f/rho)/(dT*dT);
+        if(dB < rho) repWallFy -= eta * (1.0f/dB - 1.0f/rho)/(dB*dB);
 
-        if(dR < rho){
-            repWallFx -= eta * (1.0f/dR - 1.0f/rho) / (dR*dR);
-        }
-        if(dL < rho){
-            repWallFx += eta * (1.0f/dL - 1.0f/rho) / (dL*dL);
-        }
-        if(dT < rho){
-            repWallFy += eta * (1.0f/dT - 1.0f/rho) / (dT*dT);
-        }
-        if(dB < rho){
-            repWallFy -= eta * (1.0f/dB - 1.0f/rho) / (dB*dB);
-        }
-
-        logMessage(LOG_PATH, "[DRONE] Wall repulsion: Fx=%f Fy=%f", repWallFx, repWallFy);
-
-        // -------------------------------
-        // TOTAL FORCE WITH MAX LIMIT
-        // -------------------------------
-
+        // Somma forze e limitazione
         float totFx = drn.Fx + repFx + repWallFx;
         float totFy = drn.Fy + repFy + repWallFy;
-
         float forceMag = sqrt(totFx*totFx + totFy*totFy);
-        logMessage(LOG_PATH, "[DRONE] Total force before clamp: Fx=%f Fy=%f mag=%f", totFx, totFy, forceMag);
-
-        if (forceMag > MAX_FORCE) {
-            totFx = totFx / forceMag * MAX_FORCE;
-            totFy = totFy / forceMag * MAX_FORCE;
-            logMessage(LOG_PATH, "[DRONE] Force clamped to max: Fx=%f Fy=%f", totFx, totFy);
+        if(forceMag > MAX_FORCE){
+            totFx = totFx/forceMag*MAX_FORCE;
+            totFy = totFy/forceMag*MAX_FORCE;
         }
 
-        // -------------------------------
-        // DRONE MOVEMENT UPDATE
-        // -------------------------------
-        drn.x_2 = drn.x_1;
-        drn.x_1 = drn.x;
-        drn.y_2 = drn.y_1;
-        drn.y_1 = drn.y;
+        // Aggiornamento posizione
+        drn.x_2 = drn.x_1; drn.x_1 = drn.x;
+        drn.y_2 = drn.y_1; drn.y_1 = drn.y;
+        drn.x = (DT*DT*totFx - drn.x_2 + (2+K*DT)*drn.x_1)/(1+K*DT);
+        drn.y = (DT*DT*totFy - drn.y_2 + (2+K*DT)*drn.y_1)/(1+K*DT);
 
-        drn.x = (DT*DT*totFx - drn.x_2 + (2 + K*DT)*drn.x_1) / (1 + K*DT);
-        drn.y = (DT*DT*totFy - drn.y_2 + (2 + K*DT)*drn.y_1) / (1 + K*DT);
-
-        logMessage(LOG_PATH, "[DRONE] Updated position: (%f,%f)", drn.x, drn.y);
-
-        for (int i = 0; i < num_obstacles; i++) {
+        // Controllo collisioni con ostacoli
+        for(int i=0; i<num_obstacles; i++){
             float dx = drn.x - obstacles[i].x;
             float dy = drn.y - obstacles[i].y;
             float d = sqrt(dx*dx + dy*dy);
-            if (d <= 0.1) {
-                logMessage(LOG_PATH, "[DRONE] COLLISION with obstacle %d! Restoring previous position.", i);
+            if(d <= 0.1f){
                 drn.x = drn.x_1;
                 drn.y = drn.y_1;
                 break;
             }
         }
 
-        // -------------------------------
-        // SEND UPDATED POSITION + FORCES
-        // -------------------------------
+        // Invio aggiornamenti
         send_position(msg, drn.x, drn.y, fd_out);
         send_forces(msg, fd_out, drn.Fx, drn.Fy, repFx, repFy, repWallFx, repWallFy);
 
@@ -300,6 +263,8 @@ quit:
     free(targets);
     close(fd_in);
     close(fd_out);
+    close(fd_wd_read);
+    close(fd_wd_write);
 
     return 0;
 }

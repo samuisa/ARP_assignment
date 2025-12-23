@@ -10,7 +10,7 @@
 #define MSG_TYPE_OBST_FORCE  7
 #define MSG_TYPE_TARGETS     8
 #define MSG_TYPE_FORCE       9
-#define MSG_TYPE_WATCHDOG    10
+#define MSG_TYPE_PID         10
 
 #define PERC_OBST            0.005
 #define PERC_TARG            0.001

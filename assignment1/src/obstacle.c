@@ -53,49 +53,73 @@ Point* generate_obstacles(int width, int height, int* num_out) {
     return arr;
 }
 
-/*volatile sig_atomic_t running = 1;
+void send_pid(int fd_wd_write){
+    pid_t pid = getpid();
+    Message msg;
+    msg.type = MSG_TYPE_PID;
+    snprintf(msg.data, sizeof(msg.data), "%d", pid);
+    if(write(fd_wd_write, &msg, sizeof(msg)) < 0){
+        perror("[OBST] write PID to watchdog");
+        exit(1);
+    }
+    logMessage(LOG_PATH, "[OBST] PID sent to watchdog: %d", pid);
+}
 
-void handle_sigterm(int sig) {
-    (void)sig;        // evita warning
-    running = 0;      // SOLO questo
-}*/
+pid_t receive_watchdog_pid(int fd_wd_read){
+    Message msg;
+    ssize_t n;
+    pid_t pid_wd = -1;
+
+    do {
+        n = read(fd_wd_read, &msg, sizeof(msg));
+    } while(n < 0 && errno == EINTR);
+
+    if(n <= 0){
+        perror("[OBST] read watchdog PID");
+        exit(1);
+    }
+
+    if(msg.type == MSG_TYPE_PID){
+        sscanf(msg.data, "%d", &pid_wd);
+        logMessage(LOG_PATH, "[OBST] Watchdog PID received: %d", pid_wd);
+    } else {
+        logMessage(LOG_PATH, "[OBST] Unexpected message type from watchdog: %d", msg.type);
+    }
+
+    return pid_wd;
+}
 
 /*====================================================================
   MAIN OBSTACLE PROCESS
 ======================================================================*/
 int main(int argc, char *argv[]) {
 
-    if (argc < 2) {
+    if (argc < 5) {
         fprintf(stderr, "Usage: %s <pipe_read_fd> <pipe_write_fd> <pipe_write_fd> <pipe_read_fd>\n", argv[0]);
         return 1;
     }
 
     int fd_in  = atoi(argv[1]);
     int fd_out = atoi(argv[2]);
-    //pid_t watchdog_pid = atoi(argv[3]);
+    int fd_wd_read     = atoi(argv[3]);
+    int fd_wd_write    = atoi(argv[4]);
 
     logMessage(LOG_PATH, "[OBST] Started (fd_in=%d, fd_out=%d)", fd_in, fd_out);
 
-    /*ignal(SIGTERM, handle_sigterm);
-    signal(SIGINT,  handle_sigterm);
-
-    time_t last_heartbeat = 0;*/
-
     int num_obst = 0;
+
+    send_pid(fd_wd_write);
+
+    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
 
 
     /*================== MAIN LOOP ==================*/
     while (1) {
 
-        /*time_t now = time(NULL);
-        if (now != last_heartbeat) {
-            kill(watchdog_pid, SIGUSR1);
-            last_heartbeat = now;
-        }*/
-
         /*--------------------------
           Setup select() to read pipe
         ---------------------------*/
+
         fd_set set;
         FD_ZERO(&set);
         FD_SET(fd_in, &set);

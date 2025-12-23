@@ -4,17 +4,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <signal.h>
-#include <time.h>
-#include "app_common.h" // Assumiamo che questo file esista
-#include "log.h"        // Include per il logging
+#include <errno.h>
+#include "app_common.h" // Definizione Message, MSG_TYPE_PID, ecc.
+#include "log.h"        // logMessage
 
 #define KEY_QUIT 'q'
 
 void draw_legend() {
     int start_y = 6;
-    int col_1 = 15;
-    int col_2 = 22;
-    int col_3 = 29;
+    int col_1 = 15, col_2 = 22, col_3 = 29;
 
     mvprintw(0, 0, "=== Drone Legend Control ===");
     mvprintw(2, 0, "Press '%c' to exit | Press the buttons below to control the drone", KEY_QUIT);
@@ -38,26 +36,58 @@ void draw_legend() {
     refresh();
 }
 
-/*volatile sig_atomic_t running = 1;
+void send_pid(int fd_wd_write){
+    pid_t pid = getpid();
+    Message msg;
+    msg.type = MSG_TYPE_PID;
+    snprintf(msg.data, sizeof(msg.data), "%d", pid);
+    if(write(fd_wd_write, &msg, sizeof(msg)) < 0) {
+        perror("[CTRL] write pid to watchdog");
+        exit(1);
+    }
+    logMessage(LOG_PATH, "[CTRL] PID sent to watchdog: %d", pid);
+}
 
-void handle_sigterm(int sig) {
-    (void)sig;        // evita warning
-    running = 0;      // SOLO questo
-}*/
+pid_t receive_watchdog_pid(int fd_wd_read){
+    Message msg;
+    ssize_t n;
+    pid_t pid_wd = -1;
 
+    do {
+        n = read(fd_wd_read, &msg, sizeof(msg));
+    } while(n < 0 && errno == EINTR);
 
+    if(n <= 0){
+        perror("[DRONE] read watchdog PID");
+        exit(1);
+    }
+
+    if(msg.type == MSG_TYPE_PID){
+        sscanf(msg.data, "%d", &pid_wd);
+        logMessage(LOG_PATH, "[DRONE] Watchdog PID received: %d", pid_wd);
+    } else {
+        logMessage(LOG_PATH, "[DRONE] Unexpected message type from watchdog: %d", msg.type);
+    }
+
+    return pid_wd;
+}
 
 int main(int argc, char *argv[]) {
-    if (argc < 1) {
-        fprintf(stderr, "Usage: %s <fd_out> <fd_watchdog_write> <fd_watchdog_read>\n", argv[0]);
+    if(argc < 4) {
+        fprintf(stderr, "Usage: %s <fd_out> <fd_watchdog_read> <fd_watchdog_write>\n", argv[0]);
         return 1;
     }
 
-    int fd_out = atoi(argv[1]);
-    //pid_t watchdog_pid = atoi(argv[2]);
+    int fd_out      = atoi(argv[1]);
+    int fd_wd_read  = atoi(argv[2]);
+    int fd_wd_write = atoi(argv[3]);
 
+    send_pid(fd_wd_write);
+
+    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
+    
     int ch;
-    char msg[2];
+    char msg_buf[2];
 
     initscr();
     cbreak();
@@ -67,46 +97,42 @@ int main(int argc, char *argv[]) {
 
     logMessage(LOG_PATH, "[CTRL] Main started, fd_out=%d", fd_out);
 
-    /*signal(SIGTERM, handle_sigterm);
-    signal(SIGINT,  handle_sigterm);
-
-    time_t last_heartbeat = 0;*/
-
     draw_legend();
 
-    while (1) {
-
-        /*time_t now = time(NULL);
-        if (now != last_heartbeat) {
-            kill(watchdog_pid, SIGUSR1);
-            last_heartbeat = now;
-        }*/
-
+    while(1) {
         ch = getch();
 
-        if (ch == ERR) {
+        if(ch == ERR) {
             usleep(10000);
             continue;
         }
 
-        msg[0] = (char)ch;
-        msg[1] = '\0';
+        msg_buf[0] = (char)ch;
+        msg_buf[1] = '\0';
 
-        write(fd_out, msg, 2);
-        logMessage(LOG_PATH, "[CTRL] Input captured: '%c' (ASCII %d), sent to fd_out=%d", ch, ch, fd_out);
+        // invia al fd_out
+        if(write(fd_out, msg_buf, 2) < 0) {
+            perror("[CTRL] write to fd_out");
+            break;
+        }
+
+        logMessage(LOG_PATH, "[CTRL] Input captured: '%c' (ASCII %d) sent to fd_out=%d",
+                   ch, ch, fd_out);
 
         mvprintw(14, 0, "Feedback: '%c'  ", ch);
         refresh();
 
-        if (ch == KEY_QUIT) {
-            logMessage(LOG_PATH, "[CTRL] Quit command received, exiting main loop");
+        if(ch == KEY_QUIT) {
+            logMessage(LOG_PATH, "[CTRL] Quit command received");
             break;
         }
     }
 
     endwin();
     close(fd_out);
+    close(fd_wd_read);
+    close(fd_wd_write);
 
-    logMessage(LOG_PATH, "[CTRL] Main terminated, fd_out closed");
+    logMessage(LOG_PATH, "[CTRL] Main terminated, pipes closed");
     return 0;
 }

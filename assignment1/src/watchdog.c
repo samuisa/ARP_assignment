@@ -1,149 +1,103 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <signal.h>
-#include <stdbool.h>
-#include <time.h>
-#include <string.h>
 #include <errno.h>
-
+#include <string.h>
 #include "log.h"
+#include "app_common.h"
 
-#define LOG_PATH "logs/watchdog.log"
-#define MAX_PROC 10
-#define T 5   // secondi
-
-typedef struct {
+#define LOG_PATH_WD "logs/watchdog.log"
+/*typedef struct {
     pid_t pid;
-    bool responded;
     char name[32];
 } watched_proc_t;
 
 static watched_proc_t procs[MAX_PROC];
-static int num_procs = 0;
+static int num_procs = 0;*/
 
-/* aggiornata SOLO dal signal handler */
-static volatile sig_atomic_t last_sender = -1;
+pid_t receive_pid(int fd_read){
+    Message msg;
+    ssize_t n;
+    pid_t pid = -1;
 
-/* ================= SIGNAL HANDLER ================= */
+    do {
+        n = read(fd_read, &msg, sizeof(msg));
+    } while(n < 0 && errno == EINTR);
 
-static void sigusr1_handler(int sig, siginfo_t *info, void *ctx) {
-    (void)sig;
-    (void)ctx;
-
-    if (info) {
-        last_sender = info->si_pid;
+    if(n <= 0){
+        perror("[WD] read watchdog PID");
+        exit(1);
     }
+
+    if(msg.type == MSG_TYPE_PID){
+        sscanf(msg.data, "%d", &pid);
+        //logMessage(LOG_PATH, "[WD] Watchdog PID received: %d", pid_wd);
+    } else {
+        //logMessage(LOG_PATH, "[WD] Unexpected message type from watchdog: %d", msg.type);
+    }
+
+    return pid;
 }
 
-/* ================= MAIN ================= */
+void send_pid(int fd_write){
+    pid_t pid = getpid();
+    Message msg;
+    msg.type = MSG_TYPE_PID;
+    snprintf(msg.data, sizeof(msg.data), "%d", pid);
+    write(fd_write, &msg, sizeof(msg));
+}
 
+/* ================= MAIN WATCHDOG ================= */
 int main(int argc, char *argv[]) {
 
-    /* LOG DI AVVIO GARANTITO */
-    logMessage(LOG_PATH, "Watchdog process started (argc=%d)", argc);
-
-    if (argc < 5) {
-        logMessage(LOG_PATH,
-                   "ERRORE: argomenti non validi. Usage: %s <pid name> [<pid name> ...]",
-                   argv[0]);
-        fprintf(stderr,
-                "Usage: %s <pid name> [<pid name> ...]\n",
-                argv[0]);
+    if(argc < 10) {
+        fprintf(stderr, "Usage: %s <fd_proc_read> [<fd_proc_read> ...]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    /* Registra processi */
-    for (int i = 1; i < argc && num_procs < MAX_PROC; i += 2) {
-        procs[num_procs].pid = atoi(argv[i]);
+    int fd_input_read  = atoi(argv[1]);
+    int fd_drone_read  = atoi(argv[2]);
+    int fd_bb_read     = atoi(argv[3]);
+    int fd_obst_read   = atoi(argv[4]);
+    int fd_targ_read   = atoi(argv[5]);
 
-        if (procs[num_procs].pid <= 0) {
-            logMessage(LOG_PATH,
-                       "PID non valido: '%s'", argv[i]);
-            continue;
-        }
+    int fd_input_write = atoi(argv[6]);
+    int fd_drone_write = atoi(argv[7]);
+    int fd_bb_write    = atoi(argv[8]);
+    int fd_obst_write  = atoi(argv[9]);
+    int fd_targ_write  = atoi(argv[10]);
 
-        strncpy(procs[num_procs].name,
-                argv[i + 1],
-                sizeof(procs[num_procs].name) - 1);
-        procs[num_procs].name[sizeof(procs[num_procs].name) - 1] = '\0';
-        procs[num_procs].responded = false;
+    pid_t pid_input = receive_pid(fd_input_read);
+        logMessage(LOG_PATH_WD, "[WD] Input process pid received: %d", pid_input);
 
-        logMessage(LOG_PATH,
-                   "Registrato processo: %s (pid=%d)",
-                   procs[num_procs].name,
-                   procs[num_procs].pid);
+    pid_t pid_drone = receive_pid(fd_drone_read);
+        logMessage(LOG_PATH_WD, "[WD] Drone process pid received: %d", pid_drone);
 
-        num_procs++;
-    }
+    pid_t pid_bb    = receive_pid(fd_bb_read);
+        logMessage(LOG_PATH_WD, "[WD] Blackboard process pid received: %d", pid_bb);
 
-    if (num_procs == 0) {
-        logMessage(LOG_PATH, "NESSUN processo valido da monitorare. Uscita.");
-        exit(EXIT_FAILURE);
-    }
+    pid_t pid_obst  = receive_pid(fd_obst_read);
+        logMessage(LOG_PATH_WD, "[WD] Obstacle process pid received: %d", pid_obst);
 
-    /* Installa handler SIGUSR1 */
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_sigaction = sigusr1_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_SIGINFO;
-
-    if (sigaction(SIGUSR1, &sa, NULL) == -1) {
-        logMessage(LOG_PATH,
-                   "ERRORE sigaction(SIGUSR1): %s", strerror(errno));
-        exit(EXIT_FAILURE);
-    }
-
-    logMessage(LOG_PATH,
-               "Watchdog avviato correttamente (%d processi monitorati)",
-               num_procs);
-
-    /* ================= CICLO WATCHDOG ================= */
-
-    while (1) {
-
-            logMessage(LOG_PATH, "PORCODIO");
+    pid_t pid_targ  = receive_pid(fd_targ_read);
+        logMessage(LOG_PATH_WD, "[WD] Target process pid received: %d", pid_targ);
 
 
-        /* Reset stato */
-        for (int i = 0; i < num_procs; i++)
-            procs[i].responded = false;
+    send_pid(fd_input_write);
+        logMessage(LOG_PATH_WD, "[WD] PID sent to input process: %d", getpid());
 
-        sleep(T);
+    send_pid(fd_drone_write);
+        logMessage(LOG_PATH_WD, "[WD] PID sent to drone process: %d", getpid());
 
-        /* Gestione risposta */
-        if (last_sender != -1) {
-            bool found = false;
-            for (int i = 0; i < num_procs; i++) {
-                if (procs[i].pid == last_sender) {
-                    procs[i].responded = true;
-                    logMessage(LOG_PATH,
-                               "Heartbeat ricevuto da %s (pid=%d)",
-                               procs[i].name,
-                               last_sender);
-                    found = true;
-                    break;
-                }
-            }
+    send_pid(fd_bb_write);
+        logMessage(LOG_PATH_WD, "[WD] PID sent to blackboard process: %d", getpid());
 
-            if (!found) {
-                logMessage(LOG_PATH,
-                           "SIGUSR1 ricevuto da PID sconosciuto (%d)",
-                           last_sender);
-            }
+    send_pid(fd_obst_write);
+        logMessage(LOG_PATH_WD, "[WD] PID sent to obstacle process: %d", getpid());
 
-            last_sender = -1;
-        }
+    send_pid(fd_targ_write);
+        logMessage(LOG_PATH_WD, "[WD] PID sent to target process: %d", getpid());
 
-        /* Verifica processi non responsivi */
-        for (int i = 0; i < num_procs; i++) {
-            if (!procs[i].responded) {
-                logMessage(LOG_PATH,
-                           "ALERT: processo %s (pid=%d) NON responsivo",
-                           procs[i].name,
-                           procs[i].pid);
-            }
-        }
-    }
+
+    return 0;
 }

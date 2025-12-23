@@ -6,6 +6,7 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
+#include <math.h>
 #include <time.h>
 #include "app_blackboard.h"
 #include "app_common.h"
@@ -13,6 +14,7 @@
 
 static struct timespec last_obst_change = {0, 0};
 #define OBSTACLE_PERIOD_SEC 5
+#define EPS 0.001f
 
 static char last_status[256] = "";
 
@@ -262,10 +264,43 @@ void send_resize(WINDOW *win, int fd_drone){
     logMessage(LOG_PATH, "[BB] Resize message sent: width=%d height=%d", max_x, max_y);
 }
 
+void send_pid(int fd_wd_write){
+    pid_t pid = getpid();
+    logMessage(LOG_PATH, "[BB] Sending PID to WD: %d", pid);
+    Message msg;
+    msg.type = MSG_TYPE_PID;
+    snprintf(msg.data, sizeof(msg.data), "%d", pid);
+    write(fd_wd_write, &msg, sizeof(msg));
+}
+
+pid_t receive_watchdog_pid(int fd_wd_read){
+    Message msg;
+    ssize_t n;
+    pid_t pid_wd = -1;
+
+    do {
+        n = read(fd_wd_read, &msg, sizeof(msg));
+    } while(n < 0 && errno == EINTR);
+
+    if(n <= 0){
+        perror("[DRONE] read watchdog PID");
+        exit(1);
+    }
+
+    if(msg.type == MSG_TYPE_PID){
+        sscanf(msg.data, "%d", &pid_wd);
+        logMessage(LOG_PATH, "[DRONE] Watchdog PID received: %d", pid_wd);
+    } else {
+        logMessage(LOG_PATH, "[DRONE] Unexpected message type from watchdog: %d", msg.type);
+    }
+
+    return pid_wd;
+}
+
 /* ======================= MAIN ======================= */
 
 int main(int argc, char *argv[]) {
-    if (argc < 7) {
+    if (argc < 10) {
         fprintf(stderr, "Usage: %s <pipe_fd_input_read> <fd_drone_read> <fd_drone_write> <fd_obst_read> <fd_obst_write> <fd_targ_write> <fd_targ_read> <fd_watchdog_write> <fd_watchdog_read>\n", argv[0]);
         return 1;
     }
@@ -277,7 +312,12 @@ int main(int argc, char *argv[]) {
     int fd_obst_read   = atoi(argv[5]);
     int fd_targ_write  = atoi(argv[6]);
     int fd_targ_read   = atoi(argv[7]);
-    //pid_t watchdog_pid = atoi(argv[8]);
+    int fd_wd_read     = atoi(argv[8]);
+    int fd_wd_write    = atoi(argv[9]);
+
+    send_pid(fd_wd_write);
+
+    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
 
     float drn_Fx = 0.0f, drn_Fy = 0.0f;
     float obst_Fx = 0.0f, obst_Fy = 0.0f;
@@ -300,19 +340,8 @@ int main(int argc, char *argv[]) {
     fd_set readfds;
     struct timeval tv;
     Message msg;
-    
-/*    signal(SIGTERM, handle_sigterm);
-    signal(SIGINT,  handle_sigterm);
-
-    time_t last_heartbeat = 0;*/
 
     while (1) {
-
-        /*time_t now = time(NULL);
-        if (now != last_heartbeat) {
-            kill(watchdog_pid, SIGUSR1);
-            last_heartbeat = now;
-        }*/
 
         int ch = getch();
         if (ch != ERR) {
@@ -367,7 +396,6 @@ int main(int argc, char *argv[]) {
             "[BB] Obstacle %d regenerated at (%d,%d)",
             idx, obstacles[idx].x, obstacles[idx].y);
 
-        //draw_drone(win, current_x, current_y);
         redraw_scene(win);
 
         Message m;
@@ -380,7 +408,6 @@ int main(int argc, char *argv[]) {
         //write(fd_targ_write, &m, sizeof(m));
         //write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
     }
-    
 
         // ---- PIPE INPUT ----
         if (FD_ISSET(fd_input_read, &readfds)) {
@@ -405,29 +432,64 @@ int main(int argc, char *argv[]) {
             if (n > 0) {
                 logMessage(LOG_PATH, "[BB] Drone message received: type=%d data='%s'", msg.type, msg.data);
                 switch (msg.type) {
-                    case MSG_TYPE_POSITION: {
-                        if (sscanf(msg.data, "%f %f", &current_x, &current_y) == 2) {
+
+                case MSG_TYPE_POSITION: {
+                    if (sscanf(msg.data, "%f %f", &current_x, &current_y) == 2) {
+                        redraw_scene(win);
+                    }
+
+                    int dx = (int)current_x;
+                    int dy = (int)current_y;
+
+                    for (int i = 0; i < num_targets; i++) {
+                        if (dx == (int)targets[i].x &&
+                            dy == (int)targets[i].y) {
+
+                            /* RIMOZIONE DEL TARGET */
+                            for (int j = i; j < num_targets - 1; j++) {
+                                targets[j] = targets[j + 1];
+                            }
+                            num_targets--;
+
+                            if (num_targets == 0){
+                                Message out_msg;
+                                out_msg.type = MSG_TYPE_OBSTACLES;
+                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
+
+                                write(fd_targ_write, &out_msg, sizeof(out_msg));
+                                write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
+                            }
+                            logMessage(LOG_PATH,
+                            "[BB] TARGET RIMOSSO LOCALMENTE, num_targets=%d", num_targets);
+
+                            /* Notifica al drone */
+                            Message out_msg;
+                            out_msg.type = MSG_TYPE_TARGETS;
+                            snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
+                            write(fd_drone_write, &out_msg, sizeof(out_msg));
+
                             redraw_scene(win);
+                            break; // esci: un target per volta
                         }
-                        break;
                     }
+                    break;
+                }
 
-                    case MSG_TYPE_FORCE: {
-                        if (sscanf(msg.data, "%f %f %f %f %f %f",
-                                &drn_Fx, &drn_Fy,
-                                &obst_Fx, &obst_Fy,
-                                &wall_Fx, &wall_Fy) == 6)
-                        {
-                            update_dynamic(current_x, current_y,
-                                            drn_Fx, drn_Fy,
-                                            obst_Fx, obst_Fy,
-                                            wall_Fx, wall_Fy);
-                        }
-                        break;
+                case MSG_TYPE_FORCE: {
+                    if (sscanf(msg.data, "%f %f %f %f %f %f",
+                            &drn_Fx, &drn_Fy,
+                            &obst_Fx, &obst_Fy,
+                            &wall_Fx, &wall_Fy) == 6) {
+                        update_dynamic(current_x, current_y,
+                                    drn_Fx, drn_Fy,
+                                    obst_Fx, obst_Fy,
+                                    wall_Fx, wall_Fy);
                     }
+                    break;
+                }
 
-                    default:
-                        break;
+                default:
+                    break;
                 }
             } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
                 perror("read fd_drone_read");
