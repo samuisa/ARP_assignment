@@ -6,43 +6,86 @@
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
-#include <signal.h>
 #include <math.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/select.h> 
+
 #include "app_blackboard.h"
 #include "app_common.h"
+#include "process_pid.h"
 #include "log.h"
 
+// ================= GLOBALS =================
 static struct timespec last_obst_change = {0, 0};
 #define OBSTACLE_PERIOD_SEC 5
 
 static char last_status[256] = "";
-
 static float current_x = 1.0f;
 static float current_y = 1.0f;
 
 static Point *obstacles = NULL;
 static int num_obstacles = 0;
-
 static Point *targets = NULL;
 static int num_targets = 0;
 
 static WINDOW *status_win = NULL;
+static pid_t watchdog_pid = -1;
 
-/* ======================= WINDOW UTILS ======================= */
+// ================= PID & WATCHDOG =================
+void publish_my_pid() {
+    FILE *fp = fopen(PID_FILE_PATH, "a"); 
+    if (!fp) exit(1);
+    fprintf(fp, "%s %d\n", BB_PID_TAG, getpid());
+    fclose(fp);
+}
 
-WINDOW* create_window(int height, int width, int starty, int startx)
-{
+void wait_for_watchdog() {
+    FILE *fp;
+    char line[256], tag[128];
+    int pid;
+    bool found = false;
+    // Usiamo printf qui perché ncurses non è ancora partito
+    printf("[BLACKBOARD] In attesa del Watchdog...\n");
+    fflush(stdout);
+
+    while (!found) {
+        fp = fopen(PID_FILE_PATH, "r");
+        if (fp) {
+            while (fgets(line, sizeof(line), fp)) {
+                if (sscanf(line, "%s %d", tag, &pid) == 2) {
+                    if (strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = pid;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            fclose(fp);
+        }
+        if (!found) usleep(100000);
+    }
+    printf("[BLACKBOARD] Watchdog trovato: %d\n", watchdog_pid);
+    fflush(stdout);
+}
+
+void watchdog_ping_handler(int sig) {
+    (void)sig; 
+    if (watchdog_pid > 0) kill(watchdog_pid, SIGUSR2);
+}
+
+// ================= WINDOW UTILS =================
+
+WINDOW* create_window(int height, int width, int starty, int startx) {
     WINDOW *win = newwin(height, width, starty, startx);
     keypad(win, TRUE);
     box(win, 0, 0);
     wnoutrefresh(win);
-    doupdate();
     return win;
 }
 
-void destroy_window(WINDOW *win)
-{
+void destroy_window(WINDOW *win) {
     if (!win) return;
     werase(win);
     wnoutrefresh(win);
@@ -52,53 +95,42 @@ void destroy_window(WINDOW *win)
 
 /* ======================= DRAWING ======================= */
 
-void draw_background(WINDOW *win)
-{
+void draw_background(WINDOW *win) {
     werase(win);
     box(win, 0, 0);
 }
 
-void draw_obstacles(WINDOW *win)
-{
-
+void draw_obstacles(WINDOW *win) {
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
     for (int i = 0; i < num_obstacles; i++) {
         int ox = obstacles[i].x;
         int oy = obstacles[i].y;
-        if (ox > 0 && ox < max_x - 1 &&
-            oy > 0 && oy < max_y - 1) {
+        if (ox > 0 && ox < max_x - 1 && oy > 0 && oy < max_y - 1) {
             wattron(win, COLOR_PAIR(2));
-            mvwprintw(win, oy, ox, "0");
+            mvwprintw(win, oy, ox, "O"); // Ho cambiato "0" in "O" per visibilità
             wattroff(win, COLOR_PAIR(2));
-
         }
     }
 }
 
-void draw_targets(WINDOW *win)
-{
-
+void draw_targets(WINDOW *win) {
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
     for (int i = 0; i < num_targets; i++) {
         int tx = targets[i].x;
         int ty = targets[i].y;
-        if (tx > 0 && tx < max_x - 1 &&
-            ty > 0 && ty < max_y - 1) {
+        if (tx > 0 && tx < max_x - 1 && ty > 0 && ty < max_y - 1) {
             wattron(win, COLOR_PAIR(3));
             mvwprintw(win, ty, tx, "T");
             wattroff(win, COLOR_PAIR(3));
-
         }
     }
 }
 
-
-void draw_drone(WINDOW *win, float x, float y)
-{
+void draw_drone(WINDOW *win, float x, float y) {
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
 
@@ -114,16 +146,15 @@ void draw_drone(WINDOW *win, float x, float y)
     mvwprintw(win, iy, ix, "+");
     wattroff(win, COLOR_PAIR(1));
 
-
     wnoutrefresh(win);
     wnoutrefresh(status_win);
     doupdate();
 
-    logMessage(LOG_PATH, "[BB] Drone drawn at position: (%f, %f)", x, y);
+    // Log ridotto per non intasare il disco
+    // logMessage(LOG_PATH, "[BB] Drone drawn at (%f, %f)", x, y); 
 }
 
-void redraw_scene(WINDOW *win)
-{
+void redraw_scene(WINDOW *win) {
     draw_background(win);
     draw_obstacles(win);
     draw_targets(win);
@@ -136,42 +167,28 @@ void redraw_scene(WINDOW *win)
 
 int overlaps_target(int x, int y) {
     for (int i = 0; i < num_targets; i++) {
-        if (targets[i].x == x && targets[i].y == y)
-            return 1;
+        if (targets[i].x == x && targets[i].y == y) return 1;
     }
     return 0;
 }
 
-void generate_new_obstacle(int idx,
-                           int width, int height)
-{
+void generate_new_obstacle(int idx, int width, int height) {
     int valid;
-
     do {
         valid = 1;
-
         obstacles[idx].x = rand() % (width - 2) + 1;
         obstacles[idx].y = rand() % (height - 2) + 1;
 
-        /* overlap con altri ostacoli */
         for (int i = 0; i < num_obstacles; i++) {
-            if (i != idx &&
-                obstacles[idx].x == obstacles[i].x &&
-                obstacles[idx].y == obstacles[i].y) {
-                valid = 0;
-                break;
+            if (i != idx && obstacles[idx].x == obstacles[i].x && obstacles[idx].y == obstacles[i].y) {
+                valid = 0; break;
             }
         }
-
-        /* overlap con target */
-        if (valid && overlaps_target(obstacles[idx].x,
-                                     obstacles[idx].y)) {
+        if (valid && overlaps_target(obstacles[idx].x, obstacles[idx].y)) {
             valid = 0;
         }
-
     } while (!valid);
 }
-
 
 /* ======================= STATUS BAR ======================= */
 
@@ -208,24 +225,22 @@ void update_dynamic(float x, float y,
 
 /* ======================= RESIZE ======================= */
 
-void reposition_and_redraw(WINDOW **win_ptr)
-{
+void reposition_and_redraw(WINDOW **win_ptr) {
     if (is_term_resized(LINES, COLS)) {
         resize_term(0, 0);
     }
 
     int new_width  = COLS;
     int new_height = LINES - 1;
-
     int startx = 0;
     int starty = 1;
 
     if (*win_ptr != NULL) {
-        if (wresize(*win_ptr, new_height, new_width) == ERR ||
-            mvwin(*win_ptr, starty, startx) == ERR) {
+        if (wresize(*win_ptr, new_height, new_width) == ERR || mvwin(*win_ptr, starty, startx) == ERR) {
             destroy_window(*win_ptr);
             *win_ptr = create_window(new_height, new_width, starty, startx);
-            status_win = newwin(1, new_width, 0, 0);
+            wresize(status_win, 1, new_width);
+            mvwin(status_win, 0, 0);
         }
     } else {
         *win_ptr = create_window(new_height, new_width, starty, startx);
@@ -234,17 +249,13 @@ void reposition_and_redraw(WINDOW **win_ptr)
 
     werase(status_win);
     box(*win_ptr, 0, 0);
-
     redraw_scene(*win_ptr);
-
-
-    logMessage(LOG_PATH, "[BB] Window resized/redrawn: width=%d height=%d", new_width, new_height);
+    logMessage(LOG_PATH, "[BB] Resized: %dx%d", new_width, new_height);
 }
 
 /* ======================= IPC ======================= */
 
-void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ)
-{
+void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ) {
     Message msg;
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
@@ -255,62 +266,22 @@ void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ)
     write(fd_drone, &msg, sizeof(msg));
     write(fd_obst,  &msg, sizeof(msg));
     write(fd_targ,  &msg, sizeof(msg));
-
-    logMessage(LOG_PATH, "[BB] Window size sent: width=%d height=%d", max_x, max_y);
 }
 
-void send_resize(WINDOW *win, int fd_drone){
+void send_resize(WINDOW *win, int fd_drone) {
     Message msg;
-
     int max_y, max_x;
     getmaxyx(win, max_y, max_x);
-
     msg.type = MSG_TYPE_SIZE;
     snprintf(msg.data, sizeof(msg.data), "%d %d", max_x, max_y);
-
     write(fd_drone, &msg, sizeof(msg));
-
-    logMessage(LOG_PATH, "[BB] Resize message sent: width=%d height=%d", max_x, max_y);
 }
 
-void send_pid(int fd_wd_write){
-    pid_t pid = getpid();
-    logMessage(LOG_PATH, "[BB] Sending PID to WD: %d", pid);
-    Message msg;
-    msg.type = MSG_TYPE_PID;
-    snprintf(msg.data, sizeof(msg.data), "%d", pid);
-    write(fd_wd_write, &msg, sizeof(msg));
-}
-
-pid_t receive_watchdog_pid(int fd_wd_read){
-    Message msg;
-    ssize_t n;
-    pid_t pid_wd = -1;
-
-    do {
-        n = read(fd_wd_read, &msg, sizeof(msg));
-    } while(n < 0 && errno == EINTR);
-
-    if(n <= 0){
-        perror("[DRONE] read watchdog PID");
-        exit(1);
-    }
-
-    if(msg.type == MSG_TYPE_PID){
-        sscanf(msg.data, "%d", &pid_wd);
-        logMessage(LOG_PATH, "[DRONE] Watchdog PID received: %d", pid_wd);
-    } else {
-        logMessage(LOG_PATH, "[DRONE] Unexpected message type from watchdog: %d", msg.type);
-    }
-
-    return pid_wd;
-}
-
-/* ======================= MAIN ======================= */
-
+// ================= MAIN =================
 int main(int argc, char *argv[]) {
-    if (argc < 10) {
-        fprintf(stderr, "Usage: %s <pipe_fd_input_read> <fd_drone_read> <fd_drone_write> <fd_obst_read> <fd_obst_write> <fd_targ_write> <fd_targ_read> <fd_watchdog_write> <fd_watchdog_read>\n", argv[0]);
+    // Controllo argomenti critico
+    if (argc < 8) {
+        fprintf(stderr, "[BB] Errore: Servono 7 file descriptors, ricevuti %d\n", argc-1);
         return 1;
     }
 
@@ -321,49 +292,54 @@ int main(int argc, char *argv[]) {
     int fd_obst_read   = atoi(argv[5]);
     int fd_targ_write  = atoi(argv[6]);
     int fd_targ_read   = atoi(argv[7]);
-    int fd_wd_read     = atoi(argv[8]);
-    int fd_wd_write    = atoi(argv[9]);
 
-    send_pid(fd_wd_write);
+    signal(SIGPIPE, SIG_IGN); 
 
-    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
+    struct sigaction sa;
+    sa.sa_handler = watchdog_ping_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGUSR1, &sa, NULL);
+
+    // 1. Aspetta Watchdog (BLOCCANTE, stampa su stdout)
+    wait_for_watchdog();
+
+    // 2. Pubblica PID
+    publish_my_pid();
+
+    // 3. INIZIALIZZA NCURSES (MANCAVA QUESTO!)
+    initscr();
+    cbreak();
+    noecho();
+    nodelay(stdscr, TRUE); // <--- QUESTA RIGA MANCAVA! FIX CRUCIALE
+    curs_set(0); // Nasconde il cursore
+    start_color();
+    use_default_colors();
+    init_pair(1, COLOR_BLUE, -1);  // Drone
+    init_pair(2, COLOR_RED, -1);   // Ostacoli
+    init_pair(3, COLOR_GREEN, -1); // Target
+    refresh();
+
+    // 4. Crea finestre
+    status_win = newwin(1, COLS, 0, 0);
+    WINDOW *win = create_window(LINES - 1, COLS, 1, 0);
+    
+    // 5. Invia dimensioni iniziali
+    reposition_and_redraw(&win);
+    send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
 
     float drn_Fx = 0.0f, drn_Fy = 0.0f;
     float obst_Fx = 0.0f, obst_Fy = 0.0f;
     float wall_Fx = 0.0f, wall_Fy = 0.0f;
 
-    initscr();
-
-    if (has_colors()) {
-        start_color();
-        use_default_colors();
-
-        init_pair(1, COLOR_BLUE,  -1);  // DRONE
-        init_pair(2, COLOR_RED,   -1);  // OSTACOLI
-        init_pair(3, COLOR_GREEN, -1);  // TARGET
-    }
-
-    cbreak();
-    noecho();
-    curs_set(0);
-    keypad(stdscr, TRUE);
-    timeout(0);
-
-    logMessage(LOG_PATH, "[BB] main avviato");
-
-    status_win = newwin(1, COLS, 0, 0);
-    WINDOW *win = create_window(HEIGHT - 1, WIDTH, 1, 0);
-    reposition_and_redraw(&win);
-    send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
+    logMessage(LOG_PATH, "[BB] Ready and GUI started");
 
     fd_set readfds;
     struct timeval tv;
     Message msg;
-
-    static struct timespec last_wd_hb = {0, 0};
-
+    
     while (1) {
-
+        // Controllo input tastiera (ncurses)
         int ch = getch();
         if (ch != ERR) {
             if (ch == 'q') break;
@@ -373,25 +349,33 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // Timer rigenerazione ostacoli
         struct timespec now;
         clock_gettime(CLOCK_MONOTONIC, &now);
+        if (num_obstacles > 0 && now.tv_sec - last_obst_change.tv_sec >= OBSTACLE_PERIOD_SEC) {
+            last_obst_change = now;
+            int idx = rand() % num_obstacles;
+            int max_y, max_x;
+            getmaxyx(win, max_y, max_x);
+            generate_new_obstacle(idx, max_x, max_y);
+            
+            redraw_scene(win);
 
-        /* ================= WATCHDOG HEARTBEAT ================= */
-        if (now.tv_sec - last_wd_hb.tv_sec >= 1) {
-            kill(pid_watchdog, SIGUSR1);
-
-            logMessage(LOG_PATH,
-                "[BB] WD heartbeat sent");
-
-            last_wd_hb = now;
+            // Invia aggiornamento
+            Message m;
+            m.type = MSG_TYPE_OBSTACLES;
+            snprintf(m.data, sizeof(m.data), "%d", num_obstacles);
+            write(fd_drone_write, &m, sizeof(m));
+            write(fd_drone_write, obstacles, sizeof(Point) * num_obstacles);
         }
 
-
+        // Setup Select
         FD_ZERO(&readfds);
         FD_SET(fd_input_read, &readfds);
         FD_SET(fd_drone_read, &readfds);
         FD_SET(fd_obst_read, &readfds);
         FD_SET(fd_targ_read, &readfds); 
+        
         int maxfd = fd_input_read;
         if (fd_drone_read > maxfd) maxfd = fd_drone_read;
         if (fd_obst_read > maxfd) maxfd = fd_obst_read;
@@ -399,110 +383,61 @@ int main(int argc, char *argv[]) {
         maxfd += 1;
 
         tv.tv_sec  = 0;
-        tv.tv_usec = 50000;
+        tv.tv_usec = 50000; // 50ms refresh
 
         int ret = select(maxfd, &readfds, NULL, NULL, &tv);
         if (ret < 0) {
             if (errno == EINTR) continue;
-            perror("select");
             break;
         }
 
-
-         /* =====================================================
-       GESTIONE TEMPORALE OSTACOLI (OGNI 5 SECONDI)
-       ===================================================== */
-
-        if (num_obstacles > 0 &&
-            now.tv_sec - last_obst_change.tv_sec >= OBSTACLE_PERIOD_SEC) {
-
-            last_obst_change = now;
-
-            int idx = rand() % num_obstacles;
-
-            int max_y, max_x;
-            getmaxyx(win, max_y, max_x);
-
-            generate_new_obstacle(idx, max_x, max_y);
-
-            logMessage(LOG_PATH,
-                "[BB] Obstacle %d regenerated at (%d,%d)",
-                idx, obstacles[idx].x, obstacles[idx].y);
-
-            redraw_scene(win);
-
-            Message m;
-            m.type = MSG_TYPE_OBSTACLES;
-            snprintf(m.data, sizeof(m.data), "%d", num_obstacles);
-
-            write(fd_drone_write, &m, sizeof(m));
-            write(fd_drone_write, obstacles, sizeof(Point) * num_obstacles);
-
-            //write(fd_targ_write, &m, sizeof(m));
-            //write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
-        }
-
-        // ---- PIPE INPUT ----
+        // Lettura PIPE: INPUT
         if (FD_ISSET(fd_input_read, &readfds)) {
             char buf[80];
             ssize_t n = read(fd_input_read, buf, sizeof(buf)-1);
             if (n > 0) {
                 buf[n] = '\0';
-                logMessage(LOG_PATH, "[BB] Input pipe received: '%s'", buf);
                 if (buf[0] == 'q') break;
+                // Inoltra input al drone
                 msg.type = MSG_TYPE_INPUT;
                 snprintf(msg.data, sizeof(msg.data), "%s", buf);
                 write(fd_drone_write, &msg, sizeof(Message));
-            } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("read fd_input");
-                break;
             }
         }
 
-        // ---- PIPE DRONE ----
+        // Lettura PIPE: DRONE
         if (FD_ISSET(fd_drone_read, &readfds)) {
-            ssize_t n = read(fd_drone_read, &msg, sizeof(msg));
-            if (n > 0) {
-                logMessage(LOG_PATH, "[BB] Drone message received: type=%d data='%s'", msg.type, msg.data);
+            if (read(fd_drone_read, &msg, sizeof(msg)) > 0) {
                 switch (msg.type) {
 
-                case MSG_TYPE_POSITION: {
-                    if (sscanf(msg.data, "%f %f", &current_x, &current_y) == 2) {
-                        redraw_scene(win);
-                    }
-
+                case MSG_TYPE_POSITION:{
+                    sscanf(msg.data, "%f %f", &current_x, &current_y);
+                    redraw_scene(win);
+                    
+                    // Gestione collisione Target (semplificata)
                     int dx = (int)current_x;
                     int dy = (int)current_y;
-
                     for (int i = 0; i < num_targets; i++) {
-                        if (dx == (int)targets[i].x &&
-                            dy == (int)targets[i].y) {
-
-                            /* RIMOZIONE DEL TARGET */
-                            for (int j = i; j < num_targets - 1; j++) {
-                                targets[j] = targets[j + 1];
-                            }
+                        if (dx == (int)targets[i].x && dy == (int)targets[i].y) {
+                            // Rimuovi target
+                            for (int j = i; j < num_targets - 1; j++) targets[j] = targets[j + 1];
                             num_targets--;
-
-                            if (num_targets == 0){
-                                Message out_msg;
-                                out_msg.type = MSG_TYPE_OBSTACLES;
-                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
-
-                                write(fd_targ_write, &out_msg, sizeof(out_msg));
-                                write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
-                            }
-                            logMessage(LOG_PATH,
-                            "[BB] TARGET RIMOSSO LOCALMENTE, num_targets=%d", num_targets);
-
-                            /* Notifica al drone */
+                            
+                            // Notifica rimozione
                             Message out_msg;
                             out_msg.type = MSG_TYPE_TARGETS;
                             snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
                             write(fd_drone_write, &out_msg, sizeof(out_msg));
-
+                            
+                            // Rigenera ostacoli se finiti target
+                            if (num_targets == 0) {
+                                out_msg.type = MSG_TYPE_OBSTACLES;
+                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
+                                write(fd_targ_write, &out_msg, sizeof(out_msg));
+                                write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
+                            }
                             redraw_scene(win);
-                            break; // esci: un target per volta
+                            break; 
                         }
                     }
                     break;
@@ -521,124 +456,68 @@ int main(int argc, char *argv[]) {
                     break;
                 }
 
-                default:
+                    default:
                     break;
+
                 }
-            } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("read fd_drone_read");
-                break;
             }
         }
 
-        // ---- PIPE OBSTACLE ----
+        // Lettura PIPE: OBSTACLES
         if (FD_ISSET(fd_obst_read, &readfds)) {
-            ssize_t n = read(fd_obst_read, &msg, sizeof(msg));
-            if (n > 0) {
-                logMessage(LOG_PATH, "[BB] Obstacles message received: type=%d data='%s'", msg.type, msg.data);
-                switch (msg.type) {
-                    case MSG_TYPE_OBSTACLES: {
-                        int count = 0;
-                        if (sscanf(msg.data, "%d", &count) == 1 && count > 0) {
-                            if (obstacles != NULL) free(obstacles);
-                            obstacles = malloc(sizeof(Point) * count);
-                            if (!obstacles) {
-                                fprintf(stderr, "Errore allocazione ostacoli\n");
-                                break;
-                            }
-                            ssize_t n_read = read(fd_obst_read, obstacles, sizeof(Point) * count);
-                            if ((size_t)n_read != sizeof(Point) * (size_t)count){
-                                fprintf(stderr, "Errore lettura ostacoli (bytes letti %zd)\n", n_read);
-                                free(obstacles);
-                                obstacles = NULL;
-                                num_obstacles = 0;
-                            } else {
-                                num_obstacles = count;
-                                for(int i=0;i<num_obstacles;i++)
-                                    logMessage(LOG_PATH, "[BB] Obstacle %d: (%f, %f)", i, obstacles[i].x, obstacles[i].y);
-
-                                Message out_msg;
-                                out_msg.type = MSG_TYPE_OBSTACLES;
-                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
-
-                                write(fd_drone_write, &out_msg, sizeof(out_msg));
-                                write(fd_drone_write, obstacles, sizeof(Point) * num_obstacles);
-                                write(fd_targ_write, &out_msg, sizeof(out_msg));
-                                write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
-                            }
-                        }
-                        break;
-                    }
-                    default:
-                        break;
+            if (read(fd_obst_read, &msg, sizeof(msg)) > 0 && msg.type == MSG_TYPE_OBSTACLES) {
+                int count;
+                sscanf(msg.data, "%d", &count);
+                if (count > 0) {
+                    free(obstacles);
+                    obstacles = malloc(sizeof(Point) * count);
+                    read(fd_obst_read, obstacles, sizeof(Point) * count);
+                    num_obstacles = count;
+                    
+                    // Inoltra ostacoli agli altri processi
+                    Message out_msg;
+                    out_msg.type = MSG_TYPE_OBSTACLES;
+                    snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
+                    write(fd_drone_write, &out_msg, sizeof(out_msg));
+                    write(fd_drone_write, obstacles, sizeof(Point) * num_obstacles);
+                    write(fd_targ_write, &out_msg, sizeof(out_msg));
+                    write(fd_targ_write, obstacles, sizeof(Point) * num_obstacles);
                 }
                 redraw_scene(win);
-            } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("read fd_obst_read");
-                break;
             }
         }
 
-        // ----- PIPE TARGET ------
-        if (FD_ISSET(fd_targ_read, &readfds)){
-            ssize_t n = read(fd_targ_read, &msg, sizeof(msg));
-            if (n > 0) {
-                logMessage(LOG_PATH, "[BB] Targets message received: type=%d data='%s'", msg.type, msg.data);
-                switch (msg.type) {
-                    case MSG_TYPE_TARGETS: {
-                        int count = 0;
-                        if (sscanf(msg.data, "%d", &count) == 1 && count > 0) {
-                            if (targets != NULL) free(targets);
-                            targets = malloc(sizeof(Point) * count);
-                            if (!targets) {
-                                fprintf(stderr, "Errore allocazione targets\n");
-                                break;
-                            }
-                            ssize_t n_read = read(fd_targ_read, targets, sizeof(Point) * count);
-                            if ((size_t)n_read != sizeof(Point) * (size_t)count){
-                                fprintf(stderr, "Errore lettura targets (bytes letti %zd)\n", n_read);
-                                free(targets);
-                                targets = NULL;
-                                num_targets = 0;
-                            } else {
-                                num_targets = count;
-                                for(int i=0;i<num_targets;i++)
-                                    logMessage(LOG_PATH, "[BB] Target %d: (%f, %f)", i, targets[i].x, targets[i].y);
+        // Lettura PIPE: TARGETS
+        if (FD_ISSET(fd_targ_read, &readfds)) {
+            if (read(fd_targ_read, &msg, sizeof(msg)) > 0 && msg.type == MSG_TYPE_TARGETS) {
+                int count;
+                sscanf(msg.data, "%d", &count);
+                if (count > 0) {
+                    free(targets);
+                    targets = malloc(sizeof(Point) * count);
+                    read(fd_targ_read, targets, sizeof(Point) * count);
+                    num_targets = count;
 
-                                Message out_msg;
-                                out_msg.type = MSG_TYPE_TARGETS;
-                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
-
-                                write(fd_drone_write, &out_msg, sizeof(out_msg));
-                                write(fd_drone_write, targets, sizeof(Point) * num_targets);
-                                write(fd_obst_write, &out_msg, sizeof(out_msg));
-                                write(fd_obst_write, targets, sizeof(Point) * num_targets);
-                            }
-                        }
-                        break;
-                    }
-                    default:
-                        break;
+                    // Inoltra targets
+                    Message out_msg;
+                    out_msg.type = MSG_TYPE_TARGETS;
+                    snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
+                    write(fd_drone_write, &out_msg, sizeof(out_msg));
+                    write(fd_drone_write, targets, sizeof(Point) * num_targets);
+                    write(fd_obst_write, &out_msg, sizeof(out_msg));
+                    write(fd_obst_write, targets, sizeof(Point) * num_targets);
                 }
                 redraw_scene(win);
-            } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                perror("read fd_targ_read");
-                break;
             }
         }
     }
 
+    // PULIZIA FINALE
     if (win) destroy_window(win);
     if (obstacles) free(obstacles);
     if (targets) free(targets);
-    close(fd_input_read);
-    close(fd_drone_read);
-    close(fd_drone_write);
-    close(fd_obst_read);
-    close(fd_obst_write);
-    close(fd_targ_read);
-    close(fd_targ_write);
-
-    logMessage(LOG_PATH, "[BB] main terminato");
-    endwin();
+    // Chiudi FD...
+    logMessage(LOG_PATH, "[BB] Terminazione corretta");
+    endwin(); // CRUCIALE: Ripristina il terminale
     return 0;
 }

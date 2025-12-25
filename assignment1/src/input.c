@@ -6,10 +6,14 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
+
+#include "process_pid.h"
 #include "app_common.h" // Definizione Message, MSG_TYPE_PID, ecc.
 #include "log.h"        // logMessage
 
 #define KEY_QUIT 'q'
+
+static volatile pid_t watchdog_pid = -1;
 
 void draw_legend() {
     int start_y = 6;
@@ -37,55 +41,64 @@ void draw_legend() {
     refresh();
 }
 
-void send_pid(int fd_wd_write){
-    pid_t pid = getpid();
-    Message msg;
-    msg.type = MSG_TYPE_PID;
-    snprintf(msg.data, sizeof(msg.data), "%d", pid);
-    if(write(fd_wd_write, &msg, sizeof(msg)) < 0) {
-        perror("[CTRL] write pid to watchdog");
-        exit(1);
-    }
-    logMessage(LOG_PATH, "[CTRL] PID sent to watchdog: %d", pid);
+void publish_my_pid() {
+    FILE *fp = fopen(PID_FILE_PATH, "a");
+    if (!fp) exit(1);
+    fprintf(fp, "%s %d\n", INPUT_PID_TAG, getpid());
+    fclose(fp);
 }
 
-pid_t receive_watchdog_pid(int fd_wd_read){
-    Message msg;
-    ssize_t n;
-    pid_t pid_wd = -1;
+void wait_for_watchdog() {
+    FILE *fp;
+    char line[256], tag[128];
+    int pid;
+    bool found = false;
+    
+    printf("[INPUT] In attesa del Watchdog...\n");
+    fflush(stdout);
 
-    do {
-        n = read(fd_wd_read, &msg, sizeof(msg));
-    } while(n < 0 && errno == EINTR);
-
-    if(n <= 0){
-        perror("[DRONE] read watchdog PID");
-        exit(1);
+    while(!found) {
+        fp = fopen(PID_FILE_PATH, "r");
+        if(fp) {
+            while(fgets(line, sizeof(line), fp)) {
+                if(sscanf(line, "%s %d", tag, &pid) == 2) {
+                    if(strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = pid; 
+                        found = true; 
+                        break;
+                    }
+                }
+            }
+            fclose(fp);
+        }
+        if(!found) usleep(100000);
     }
+    printf("[INPUT] Watchdog trovato! PID: %d\n", watchdog_pid);
+    printf("[INPUT] Controlli attivi (premi i tasti, non vedrai nulla a schermo)\n");
+    fflush(stdout);
+}
 
-    if(msg.type == MSG_TYPE_PID){
-        sscanf(msg.data, "%d", &pid_wd);
-        logMessage(LOG_PATH, "[DRONE] Watchdog PID received: %d", pid_wd);
-    } else {
-        logMessage(LOG_PATH, "[DRONE] Unexpected message type from watchdog: %d", msg.type);
-    }
-
-    return pid_wd;
+void watchdog_ping_handler(int signo) {
+    (void)signo; // Zittisce il warning del compilatore
+    if(watchdog_pid > 0) kill(watchdog_pid, SIGUSR2);
 }
 
 int main(int argc, char *argv[]) {
-    if(argc < 4) {
+    if(argc < 2) {
         fprintf(stderr, "Usage: %s <fd_out> <fd_watchdog_read> <fd_watchdog_write>\n", argv[0]);
         return 1;
     }
 
-    int fd_out      = atoi(argv[1]);
-    int fd_wd_read  = atoi(argv[2]);
-    int fd_wd_write = atoi(argv[3]);
+    int fd_out = atoi(argv[1]);
 
-    send_pid(fd_wd_write);
+    struct sigaction sa;
+    sa.sa_handler = watchdog_ping_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGUSR1, &sa, NULL);
 
-    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
+    wait_for_watchdog();
+    publish_my_pid();
     
     int ch;
     char msg_buf[2];
@@ -100,22 +113,7 @@ int main(int argc, char *argv[]) {
 
     draw_legend();
 
-    static struct timespec last_wd_hb = {0, 0};
-
     while(1) {
-
-        struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
-
-        /* ================= WATCHDOG HEARTBEAT ================= */
-        if (now.tv_sec - last_wd_hb.tv_sec >= 1) {
-            kill(pid_watchdog, SIGUSR1);
-
-            logMessage(LOG_PATH,
-                "[INPUT] WD heartbeat sent");
-
-            last_wd_hb = now;
-        }
 
         ch = getch();
 
@@ -147,8 +145,6 @@ int main(int argc, char *argv[]) {
 
     endwin();
     close(fd_out);
-    close(fd_wd_read);
-    close(fd_wd_write);
 
     logMessage(LOG_PATH, "[CTRL] Main terminated, pipes closed");
     return 0;

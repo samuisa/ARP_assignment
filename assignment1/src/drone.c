@@ -7,18 +7,72 @@
 #include <stdbool.h>
 #include <signal.h>
 #include <time.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #include "app_common.h"
 #include "log.h"
-
+#include "process_pid.h"
+#undef EPSILON
 #define EPSILON 0.001f
+
+typedef enum {
+    STATE_INIT, STATE_WAITING_INPUT, STATE_PROCESSING_INPUT,
+    STATE_CALCULATING_PHYSICS, STATE_SENDING_OUTPUT, STATE_IDLE
+} ProcessState;
 
 static Point *obstacles = NULL;
 static int num_obstacles = 0;
 static Point *targets = NULL;
 static int num_targets = 0;
+static volatile pid_t watchdog_pid = -1; // Volatile
+static volatile sig_atomic_t current_state = STATE_INIT;
 
-/* ======================= SEND FUNCTIONS ======================= */
+void watchdog_ping_handler(int sig) {
+    (void)sig; 
+    if (watchdog_pid > 0) kill(watchdog_pid, SIGUSR2);
+}
+
+// Nuova funzione separata
+void init_watchdog_connection() {
+    FILE *fp;
+    char line[256], tag[128];
+    int pid_temp;
+    bool wd_found = false;
+
+    printf("[DRONE] Cerco il Watchdog...\n");
+    fflush(stdout);
+
+    // 1. PRIMA TROVA IL WATCHDOG
+    while (!wd_found) {
+        fp = fopen(PID_FILE_PATH, "r");
+        if (fp) {
+            while (fgets(line, sizeof(line), fp)) {
+                if (sscanf(line, "%s %d", tag, &pid_temp) == 2) {
+                    if (strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = (pid_t)pid_temp;
+                        wd_found = true;
+                        break;
+                    }
+                }
+            }
+            fclose(fp);
+        }
+        if (!wd_found) usleep(200000);
+    }
+    printf("[DRONE] Watchdog trovato: %d\n", watchdog_pid);
+    fflush(stdout);
+
+    // 2. POI PUBBLICA IL PROPRIO PID
+    fp = fopen(PID_FILE_PATH, "a"); 
+    if (!fp) exit(1);
+    fprintf(fp, "%s %d\n", DRONE_PID_TAG, getpid());
+    fclose(fp);
+    printf("[DRONE] PID %d pubblicato.\n", getpid());
+    fflush(stdout);
+}
+
 void send_position(Message msg, float x, float y, int fd_out){
     msg.type = MSG_TYPE_POSITION;
     snprintf(msg.data, sizeof(msg.data), "%f %f", x, y);
@@ -36,106 +90,58 @@ void send_forces(Message msg, int fd_out, float drone_Fx, float drone_Fy,
     write(fd_out, &msg, sizeof(msg));
 }
 
-/* ======================= WATCHDOG PID ======================= */
-void send_pid(int fd_wd_write){
-    pid_t pid = getpid();
-    Message msg;
-    msg.type = MSG_TYPE_PID;
-    snprintf(msg.data, sizeof(msg.data), "%d", pid);
-    if(write(fd_wd_write, &msg, sizeof(msg)) < 0){
-        perror("[DRONE] write PID to watchdog");
-        exit(1);
-    }
-    logMessage(LOG_PATH, "[DRONE] PID sent to watchdog: %d", pid);
-}
+int main(int argc, char *argv[]) {
+    if (argc < 3) return 1;
 
-pid_t receive_watchdog_pid(int fd_wd_read){
-    Message msg;
-    ssize_t n;
-    pid_t pid_wd = -1;
+    int fd_in   = atoi(argv[1]);
+    int fd_out  = atoi(argv[2]);
 
-    do {
-        n = read(fd_wd_read, &msg, sizeof(msg));
-    } while(n < 0 && errno == EINTR);
-
-    if(n <= 0){
-        perror("[DRONE] read watchdog PID");
-        exit(1);
-    }
-
-    if(msg.type == MSG_TYPE_PID){
-        sscanf(msg.data, "%d", &pid_wd);
-        logMessage(LOG_PATH, "[DRONE] Watchdog PID received: %d", pid_wd);
-    } else {
-        logMessage(LOG_PATH, "[DRONE] Unexpected message type from watchdog: %d", msg.type);
-    }
-
-    return pid_wd;
-}
-
-/* ======================= MAIN ======================= */
-int main(int argc, char *argv[]){
-    if(argc < 5){
-        fprintf(stderr, "Usage: %s <fd_in> <fd_out> <fd_watchdog_read> <fd_watchdog_write>\n", argv[0]);
-        return 1;
-    }
-
-    int fd_in       = atoi(argv[1]);
-    int fd_out      = atoi(argv[2]);
-    int fd_wd_read  = atoi(argv[3]);
-    int fd_wd_write = atoi(argv[4]);
+    signal(SIGPIPE, SIG_IGN); 
 
     fcntl(fd_in, F_SETFL, O_NONBLOCK);
 
     Drone drn = {0};
-    int win_width = 0, win_height = 0;
     Message msg;
+    int win_width = 0, win_height = 0;
     bool spawned = false;
 
     logMessage(LOG_PATH, "[DRONE] Process started");
 
-    send_pid(fd_wd_write);
+    // SETUP SEGNALI
+    struct sigaction sa;
+    sa.sa_handler = watchdog_ping_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGUSR1, &sa, NULL);
 
-    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
+    // INIZIALIZZAZIONE CORRETTA (ORDINE INVERTITO INTERNAMENTE)
+    init_watchdog_connection();
 
-    static struct timespec last_wd_hb = {0, 0};
-
-    /* ================= LOOP PRINCIPALE ================= */
-    while(1){
-
-        struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
-
-        /* ================= WATCHDOG HEARTBEAT ================= */
-        if (now.tv_sec - last_wd_hb.tv_sec >= 1) {
-            kill(pid_watchdog, SIGUSR1);
-
-            logMessage(LOG_PATH,
-                "[DRONE] WD heartbeat sent");
-
-            last_wd_hb = now;
+    while (1) {
+        current_state = STATE_WAITING_INPUT;
+        
+        ssize_t n = read(fd_in, &msg, sizeof(Message));
+        
+        if (n < 0 && errno == EINTR) {
+            continue;
         }
 
-        ssize_t n = read(fd_in, &msg, sizeof(Message));
-        if(n > 0){
-            logMessage(LOG_PATH, "[DRONE] Message received: type=%d, data='%s'", msg.type, msg.data);
-
-            switch(msg.type){
+        if (n > 0) {
+            current_state = STATE_PROCESSING_INPUT;
+            switch (msg.type) {
                 case MSG_TYPE_SIZE: {
                     sscanf(msg.data, "%d %d", &win_width, &win_height);
-                    logMessage(LOG_PATH, "[DRONE] Window size: width=%d height=%d", win_width, win_height);
-
-                    if(!spawned){
-                        drn.x = win_width / 2.0;
-                        drn.y = win_height / 2.0;
+                    if (!spawned) {
+                        drn.x = win_width / 2.0f;
+                        drn.y = win_height / 2.0f;
                         drn.x_1 = drn.x_2 = drn.x;
                         drn.y_1 = drn.y_2 = drn.y;
                         spawned = true;
+                        current_state = STATE_SENDING_OUTPUT;
                         send_position(msg, drn.x, drn.y, fd_out);
                     }
                     break;
                 }
-
                 case MSG_TYPE_INPUT: {
                     char ch = msg.data[0];
                     logMessage(LOG_PATH, "[DRONE] Input received: '%c'", ch);
@@ -205,15 +211,15 @@ int main(int argc, char *argv[]){
                     } 
                     break; 
                 }
-
+                
                 default: break;
             }
         }
 
-        /* ================= CALCOLO DELLE FORZE ================= */
-        float repFx=0.0f, repFy=0.0f, repWallFx=0.0f, repWallFy=0.0f;
-
-        // Ostacoli
+        current_state = STATE_CALCULATING_PHYSICS;
+        float repFx=0.0f, repFy=0.0f, repWallFx=0.0f, repWallFy=0.0f;        
+        
+            // Ostacoli
         for(int i=0; i<num_obstacles; i++){
             float dx = drn.x - (obstacles[i].x + 0.5);
             float dy = drn.y - (obstacles[i].y + 0.5);
@@ -265,22 +271,18 @@ int main(int argc, char *argv[]){
             }
         }
 
-        // Invio aggiornamenti
+        current_state = STATE_SENDING_OUTPUT;
         send_position(msg, drn.x, drn.y, fd_out);
         send_forces(msg, fd_out, drn.Fx, drn.Fy, repFx, repFy, repWallFx, repWallFy);
 
-        usleep(1000);
+        current_state = STATE_IDLE;
+        
+        usleep(1000); 
     }
-
 quit:
-    logMessage(LOG_PATH, "[DRONE] Shutdown requested");
-
     free(obstacles);
     free(targets);
     close(fd_in);
     close(fd_out);
-    close(fd_wd_read);
-    close(fd_wd_write);
-
     return 0;
 }

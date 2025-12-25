@@ -2,23 +2,63 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <fcntl.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <time.h>
 #include <math.h>
 #include <signal.h>
-#include <time.h>
 #include <sys/select.h>
 
 #include "app_common.h"
 #include "log.h"
+#include "process_pid.h"
 
-/*====================================================================
-  GENERATE OBSTACLES
-  Generates a number of obstacles proportional to the grid size
-======================================================================*/
+typedef enum { STATE_INIT, STATE_WAITING, STATE_GENERATING } ProcessState;
+static volatile sig_atomic_t current_state = STATE_INIT;
+static volatile pid_t watchdog_pid = -1; // Volatile per i segnali
+
+void publish_my_pid() {
+    FILE *f = fopen(PID_FILE_PATH, "a");
+    if (!f) exit(1);
+    fprintf(f, "%s %d\n", OBSTACLE_PID_TAG, getpid());
+    fclose(f);
+    printf("[OBSTACLE] PID %d pubblicato.\n", getpid()); // Debug
+    fflush(stdout);
+}
+
+void wait_for_watchdog() {
+    FILE *f;
+    char line[128], tag[64];
+    int pid;
+    bool found = false;
+    
+    printf("[OBSTACLE] Cerco il Watchdog...\n");
+    fflush(stdout);
+
+    while(!found) {
+        f = fopen(PID_FILE_PATH, "r");
+        if(f) {
+            while(fgets(line, sizeof(line), f)) {
+                if(sscanf(line, "%s %d", tag, &pid) == 2) {
+                    if(strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = pid; found = true; break;
+                    }
+                }
+            }
+            fclose(f);
+        }
+        if(!found) usleep(100000);
+    }
+    printf("[OBSTACLE] Watchdog trovato: %d\n", watchdog_pid);
+    fflush(stdout);
+}
+
+void watchdog_ping_handler(int sig) {
+    (void)sig;
+    if (watchdog_pid > 0) kill(watchdog_pid, SIGUSR2);
+}
+
 Point* generate_obstacles(int width, int height, int* num_out) {
-
     int total_cells = (width - 2) * (height - 2);
     int count = (int) round(PERC_OBST * total_cells);
     if (count < 1) count = 1;
@@ -29,15 +69,13 @@ Point* generate_obstacles(int width, int height, int* num_out) {
         exit(1);
     }
 
-    srand(time(NULL));
-
+    srand(time(NULL)); // Spostare srand nel main sarebbe meglio, ma ok qui per ora
     for (int i = 0; i < count; i++) {
         int valid;
         do {
             valid = 1;
             arr[i].x = rand() % (width - 2) + 1;
             arr[i].y = rand() % (height - 2) + 1;
-            /* Avoid duplicates */
             for (int j = 0; j < i; j++) {
                 if (arr[i].x == arr[j].x && arr[i].y == arr[j].y) {
                     valid = 0;
@@ -46,167 +84,75 @@ Point* generate_obstacles(int width, int height, int* num_out) {
             }
         } while (!valid);
     }
-
-    logMessage(LOG_PATH, "[OBST] Generated %d obstacles for grid %dx%d", count, width, height);
-
+    logMessage(LOG_PATH, "[OBST] Generated %d obstacles", count);
     *num_out = count;
     return arr;
 }
 
-void send_pid(int fd_wd_write){
-    pid_t pid = getpid();
-    Message msg;
-    msg.type = MSG_TYPE_PID;
-    snprintf(msg.data, sizeof(msg.data), "%d", pid);
-    if(write(fd_wd_write, &msg, sizeof(msg)) < 0){
-        perror("[OBST] write PID to watchdog");
-        exit(1);
-    }
-    logMessage(LOG_PATH, "[OBST] PID sent to watchdog: %d", pid);
-}
-
-pid_t receive_watchdog_pid(int fd_wd_read){
-    Message msg;
-    ssize_t n;
-    pid_t pid_wd = -1;
-
-    do {
-        n = read(fd_wd_read, &msg, sizeof(msg));
-    } while(n < 0 && errno == EINTR);
-
-    if(n <= 0){
-        perror("[OBST] read watchdog PID");
-        exit(1);
-    }
-
-    if(msg.type == MSG_TYPE_PID){
-        sscanf(msg.data, "%d", &pid_wd);
-        logMessage(LOG_PATH, "[OBST] Watchdog PID received: %d", pid_wd);
-    } else {
-        logMessage(LOG_PATH, "[OBST] Unexpected message type from watchdog: %d", msg.type);
-    }
-
-    return pid_wd;
-}
-
-/*====================================================================
-  MAIN OBSTACLE PROCESS
-======================================================================*/
 int main(int argc, char *argv[]) {
-
-    if (argc < 5) {
-        fprintf(stderr, "Usage: %s <pipe_read_fd> <pipe_write_fd> <pipe_write_fd> <pipe_read_fd>\n", argv[0]);
-        return 1;
-    }
+    if (argc < 3) return 1;
 
     int fd_in  = atoi(argv[1]);
     int fd_out = atoi(argv[2]);
-    int fd_wd_read     = atoi(argv[3]);
-    int fd_wd_write    = atoi(argv[4]);
 
-    logMessage(LOG_PATH, "[OBST] Started (fd_in=%d, fd_out=%d)", fd_in, fd_out);
+    logMessage(LOG_PATH, "[OBST] Started");
 
-    int num_obst = 0;
+    // 1. Installa Gestore
+    struct sigaction sa;
+    sa.sa_handler = watchdog_ping_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGUSR1, &sa, NULL);
 
-    send_pid(fd_wd_write);
+    // 2. Trova Watchdog (COSI' watchdog_pid VIENE IMPOSTATO!)
+    wait_for_watchdog();
 
-    pid_t pid_watchdog = receive_watchdog_pid(fd_wd_read);
+    // 3. Pubblica il proprio PID (SOLO ORA il Watchdog inizierà a pingarti)
+    publish_my_pid();
 
-    static struct timespec last_wd_hb = {0, 0};
-
-    /*================== MAIN LOOP ==================*/
     while (1) {
-
-        struct timespec now;
-        clock_gettime(CLOCK_MONOTONIC, &now);
-
-        /* HEARTBEAT */
-        if (now.tv_sec - last_wd_hb.tv_sec >= 1) {
-            kill(pid_watchdog, SIGUSR1);
-            last_wd_hb = now;
-            logMessage(LOG_PATH, "[OBST] WD heartbeat sent");
-        }
-
+        current_state = STATE_WAITING;
         fd_set set;
         FD_ZERO(&set);
         FD_SET(fd_in, &set);
-
         struct timeval tv;
         tv.tv_sec = 0;
         tv.tv_usec = 200000;
 
         int ret = select(fd_in + 1, &set, NULL, NULL, &tv);
+        
         if (ret < 0) {
+            if (errno == EINTR) continue; 
             logMessage(LOG_PATH, "[OBST] ERROR select(): %s", strerror(errno));
             continue;
         }
 
-        /*--------------------------
-          Check if data is ready
-        ---------------------------*/
         if (FD_ISSET(fd_in, &set)) {
-
             Message msg;
             ssize_t n = read(fd_in, &msg, sizeof(msg));
 
-            if (n == 0) {
-                logMessage(LOG_PATH, "[OBST] Pipe closed by blackboard, exiting.");
+            if (n <= 0) {
+                logMessage(LOG_PATH, "[OBST] Pipe closed, exiting.");
                 break;
             }
 
-            if (n < 0) {
-                logMessage(LOG_PATH, "[OBST] ERROR read(): %s", strerror(errno));
-                continue;
-            }
-
-            if (n != sizeof(msg)) {
-                logMessage(LOG_PATH,
-                           "[OBST] WARNING partial read (%zd bytes instead of %zu)",
-                           n, sizeof(msg));
-                continue;
-            }
-
-            /*================================================================
-              RECEIVE WINDOW SIZE
-            =================================================================*/
             if (msg.type == MSG_TYPE_SIZE) {
-
+                current_state = STATE_GENERATING;
                 int width, height;
-                if (sscanf(msg.data, "%d %d", &width, &height) != 2) {
-                    logMessage(LOG_PATH,
-                               "[OBST] ERROR: invalid window size: '%s'",
-                               msg.data);
-                    continue;
+                if (sscanf(msg.data, "%d %d", &width, &height) == 2) {
+                    int num_obst = 0;
+                    Point* arr = generate_obstacles(width, height, &num_obst);
+                    Message out_msg;
+                    out_msg.type = MSG_TYPE_OBSTACLES;
+                    snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obst);
+                    write(fd_out, &out_msg, sizeof(out_msg));
+                    write(fd_out, arr, sizeof(Point) * num_obst);
+                    free(arr);
                 }
-
-                /* Generate obstacles based on window size */
-                Point* arr = generate_obstacles(width, height, &num_obst);
-
-                /*================================================================
-                  SEND DATA BACK:
-                  1) Message with number of obstacles
-                  2) Raw array of Point structures
-                =================================================================*/
-                Message out_msg;
-                out_msg.type = MSG_TYPE_OBSTACLES;
-                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obst);
-
-                ssize_t w1 = write(fd_out, &out_msg, sizeof(out_msg));
-                ssize_t w2 = write(fd_out, arr, sizeof(Point) * num_obst);
-
-                logMessage(LOG_PATH,
-                           "[OBST] Sent %d obstacles to blackboard (width=%d height=%d) "
-                           "write_msg=%zd write_array=%zd",
-                           num_obst, width, height, w1, w2);
-                free(arr);
             }
         }
     }
-
-    /*================== CLEANUP ==================*/
     close(fd_in);
     close(fd_out);
-
-    logMessage(LOG_PATH, "[OBST] Terminated successfully.");
     return 0;
 }

@@ -45,4 +45,5 @@ typedef struct {
     float Fx, Fy;
 } Drone;
 
+
 #endif // APP_COMMON_H
