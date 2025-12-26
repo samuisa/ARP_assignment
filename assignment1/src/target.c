@@ -31,8 +31,6 @@ void publish_my_pid() {
     }
     fprintf(fp, "%s %d\n", TARGET_PID_TAG, getpid());
     fclose(fp);
-    printf("[TARGET] PID %d pubblicato su file.\n", getpid());
-    fflush(stdout);
 }
 
 // Funzione bloccante che aspetta finché il Watchdog non scrive il suo PID
@@ -41,9 +39,6 @@ void wait_for_watchdog() {
     char line[256], tag[128];
     int pid;
     bool found = false;
-
-    printf("[TARGET] In attesa del Watchdog... (Assicurati che sia avviato!)\n");
-    fflush(stdout); // Forza la stampa immediata
 
     while(!found) {
         fp = fopen(PID_FILE_PATH, "r");
@@ -65,8 +60,6 @@ void wait_for_watchdog() {
             usleep(100000); // Dorme 100ms prima di riprovare
         }
     }
-    printf("[TARGET] Watchdog trovato! PID: %d\n", watchdog_pid);
-    fflush(stdout);
 }
 
 // Handler per il segnale SIGUSR1 inviato dal Watchdog

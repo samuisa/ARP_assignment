@@ -41,9 +41,6 @@ void init_watchdog_connection() {
     int pid_temp;
     bool wd_found = false;
 
-    printf("[DRONE] Cerco il Watchdog...\n");
-    fflush(stdout);
-
     // 1. PRIMA TROVA IL WATCHDOG
     while (!wd_found) {
         fp = fopen(PID_FILE_PATH, "r");
@@ -61,16 +58,12 @@ void init_watchdog_connection() {
         }
         if (!wd_found) usleep(200000);
     }
-    printf("[DRONE] Watchdog trovato: %d\n", watchdog_pid);
-    fflush(stdout);
 
     // 2. POI PUBBLICA IL PROPRIO PID
     fp = fopen(PID_FILE_PATH, "a"); 
     if (!fp) exit(1);
     fprintf(fp, "%s %d\n", DRONE_PID_TAG, getpid());
     fclose(fp);
-    printf("[DRONE] PID %d pubblicato.\n", getpid());
-    fflush(stdout);
 }
 
 void send_position(Message msg, float x, float y, int fd_out){

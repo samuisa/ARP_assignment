@@ -22,8 +22,6 @@ void publish_my_pid() {
     if (!f) exit(1);
     fprintf(f, "%s %d\n", OBSTACLE_PID_TAG, getpid());
     fclose(f);
-    printf("[OBSTACLE] PID %d pubblicato.\n", getpid()); // Debug
-    fflush(stdout);
 }
 
 void wait_for_watchdog() {
@@ -31,9 +29,6 @@ void wait_for_watchdog() {
     char line[128], tag[64];
     int pid;
     bool found = false;
-    
-    printf("[OBSTACLE] Cerco il Watchdog...\n");
-    fflush(stdout);
 
     while(!found) {
         f = fopen(PID_FILE_PATH, "r");
@@ -49,8 +44,6 @@ void wait_for_watchdog() {
         }
         if(!found) usleep(100000);
     }
-    printf("[OBSTACLE] Watchdog trovato: %d\n", watchdog_pid);
-    fflush(stdout);
 }
 
 void watchdog_ping_handler(int sig) {
