@@ -59,4 +59,7 @@ cleanall: clean
 	rm -rf $(BINDIR) $(LOGDIR)
 
 run: all
+	@rm -f $(LOGDIR)/*.log
+	@mkdir -p $(LOGDIR)
+	@touch $(LOGDIR)/system.log $(LOGDIR)/watchdog.log
 	./$(BINDIR)/main

@@ -10,6 +10,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 
 #include "app_common.h"
 #include "log.h"
@@ -34,14 +35,14 @@ void watchdog_ping_handler(int sig) {
     if (watchdog_pid > 0) kill(watchdog_pid, SIGUSR2);
 }
 
-// Nuova funzione separata
-void init_watchdog_connection() {
+void wait_for_watchdog_pid() {
     FILE *fp;
     char line[256], tag[128];
     int pid_temp;
     bool wd_found = false;
 
-    // 1. PRIMA TROVA IL WATCHDOG
+    logMessage(LOG_PATH, "[DRONE] Waiting for Watchdog...");
+
     while (!wd_found) {
         fp = fopen(PID_FILE_PATH, "r");
         if (fp) {
@@ -58,28 +59,29 @@ void init_watchdog_connection() {
         }
         if (!wd_found) usleep(200000);
     }
+    logMessage(LOG_PATH, "[DRONE] Watchdog found (PID %d)", watchdog_pid);
+}
 
-    // 2. POI PUBBLICA IL PROPRIO PID
-    fp = fopen(PID_FILE_PATH, "a"); 
-    if (!fp) exit(1);
+void publish_my_pid(FILE *fp) {
     fprintf(fp, "%s %d\n", DRONE_PID_TAG, getpid());
-    fclose(fp);
+    logMessage(LOG_PATH, "[DRONE] PID published securely");
 }
 
 void send_position(Message msg, float x, float y, int fd_out){
     msg.type = MSG_TYPE_POSITION;
     snprintf(msg.data, sizeof(msg.data), "%f %f", x, y);
-    logMessage(LOG_PATH, "[DRONE] Sending position: (%f, %f)", x, y);
+    //logMessage(LOG_PATH, "[DRONE] Sending position: (%f, %f)", x, y);
     write(fd_out, &msg, sizeof(msg));
 }
 
 void send_forces(Message msg, int fd_out, float drone_Fx, float drone_Fy,
-                 float obst_Fx, float obst_Fy, float wall_Fx, float wall_Fy){
+                 float obst_Fx, float obst_Fy, float wall_Fx, float wall_Fy,
+                 float abtrFx, float abtrFy){
     msg.type = MSG_TYPE_FORCE;
-    snprintf(msg.data, sizeof(msg.data), "%f %f %f %f %f %f",
-             drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
-    logMessage(LOG_PATH, "[DRONE] Sending forces: drone(%f,%f) obst(%f,%f) wall(%f,%f)",
-               drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy);
+    snprintf(msg.data, sizeof(msg.data), "%f %f %f %f %f %f %f %f",
+             drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy, abtrFx, abtrFy);
+    /*logMessage(LOG_PATH, "[DRONE] Sending forces: drone(%f,%f) obst(%f,%f) wall(%f,%f) targ(%f,%f)",
+               drone_Fx, drone_Fy, obst_Fx, obst_Fy, wall_Fx, wall_Fy, abtrFx, abtrFy);*/
     write(fd_out, &msg, sizeof(msg));
 }
 
@@ -107,8 +109,35 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGUSR1, &sa, NULL);
 
-    // INIZIALIZZAZIONE CORRETTA (ORDINE INVERTITO INTERNAMENTE)
-    init_watchdog_connection();
+    // ==========================================================
+    // INIZIALIZZAZIONE SICURA CON LOCK/FLUSH
+    // ==========================================================
+    
+    // PASSO A: Aspetta il watchdog (SENZA LOCK per evitare deadlock)
+    wait_for_watchdog_pid();
+
+    // PASSO B: Scrivi il proprio PID (CON LOCK come richiesto)
+    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+    if (!fp_pid) {
+        logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
+        exit(1);
+    }
+
+    // 1. ACQUISISCI LOCK
+    int fd_pid = fileno(fp_pid);
+    flock(fd_pid, LOCK_EX); 
+
+    // 2. CHIAMA FUNZIONE DI SCRITTURA
+    publish_my_pid(fp_pid);
+
+    // 3. FLUSH PER FORZARE SCRITTURA SU DISCO
+    fflush(fp_pid);
+
+    // 4. RILASCIA LOCK
+    flock(fd_pid, LOCK_UN);
+
+    // 5. CHIUDI
+    fclose(fp_pid);
 
     while (1) {
         current_state = STATE_WAITING_INPUT;
@@ -137,7 +166,7 @@ int main(int argc, char *argv[]) {
                 }
                 case MSG_TYPE_INPUT: {
                     char ch = msg.data[0];
-                    logMessage(LOG_PATH, "[DRONE] Input received: '%c'", ch);
+                    //logMessage(LOG_PATH, "[DRONE] Input received: '%c'", ch);
 
                     if(ch == 'q') goto quit;
 
@@ -161,9 +190,12 @@ int main(int argc, char *argv[]) {
                     }
 
                     if(isValid)
-                        logMessage(LOG_PATH, "[DRONE] Forces updated: Fx=%f Fy=%f", drn.Fx, drn.Fy);
+                        //logMessage(LOG_PATH, "[DRONE] Forces updated: Fx=%f Fy=%f", drn.Fx, drn.Fy);
+                                        logMessage(LOG_PATH, "[DRONE] PORCAMADONNA");
+
                     else
-                        logMessage(LOG_PATH, "[DRONE] Unknown input: '%c'", ch);
+                        //logMessage(LOG_PATH, "[DRONE] Unknown input: '%c'", ch);
+                    logMessage(LOG_PATH, "[DRONE] PORCODIO");
 
                     break;
                 }
@@ -179,8 +211,8 @@ int main(int argc, char *argv[]) {
                     if (obstacles) { 
                         if (read(fd_in, obstacles, sizeof(Point)*count) > 0) { 
                             num_obstacles = count; 
-                            for(int i=0; i<count; i++){
-                                logMessage(LOG_PATH, "[DRONE] Obstacle %d at (%f, %f)", i, obstacles[i].x, obstacles[i].y); 
+                            for(int i=0; i<num_obstacles; i++){
+                                logMessage(LOG_PATH, "[DRONE] Obstacle %d at (%f, %f)", i, (float)obstacles[i].x, (float)obstacles[i].y); 
                             }
                         } 
                     } 
@@ -197,8 +229,8 @@ int main(int argc, char *argv[]) {
                     if (targets) { 
                         if (read(fd_in, targets, sizeof(Point)*count) > 0) { 
                             num_targets = count; 
-                            for(int i=0; i<count; i++){ 
-                                logMessage(LOG_PATH, "[DRONE] Target %d at (%f, %f)", i, targets[i].x, targets[i].y);
+                            for(int i=0; i<num_targets; i++){ 
+                                logMessage(LOG_PATH, "[DRONE] Target %d at (%f, %f)", i, (float)targets[i].x, (float)targets[i].y);
                             } 
                         } 
                     } 
@@ -210,12 +242,29 @@ int main(int argc, char *argv[]) {
         }
 
         current_state = STATE_CALCULATING_PHYSICS;
-        float repFx=0.0f, repFy=0.0f, repWallFx=0.0f, repWallFy=0.0f;        
+        float repFx=0.0f, repFy=0.0f, repWallFx=0.0f, repWallFy=0.0f, abtrFx = 0.0f, abtrFy = 0.0f;        
         
-            // Ostacoli
+            // target
+        for(int i=0; i<num_targets; i++){
+            float dx = drn.x - ((float)targets[i].x + 0.5);
+            float dy = drn.y - ((float)targets[i].y + 0.5);
+            float d = sqrt(dx*dx + dy*dy) - 0.5f;
+
+            logMessage(LOG_PATH, "distanza da target %d d = %f", i, d);
+            if(d < rho && d > 0.1f){
+                float F = eta * (1.0f/d - 1.0f/rho) / (d*d);
+                abtrFx += F * dx/d;
+                abtrFy += F * dy/d;
+            }
+        }
+        if(fabs(abtrFx) < EPSILON) abtrFx = 0.0f;
+        if(fabs(abtrFy) < EPSILON) abtrFy = 0.0f; 
+
+        
+            // ostacoli
         for(int i=0; i<num_obstacles; i++){
-            float dx = drn.x - (obstacles[i].x + 0.5);
-            float dy = drn.y - (obstacles[i].y + 0.5);
+            float dx = drn.x - ((float)obstacles[i].x + 0.5);
+            float dy = drn.y - ((float)obstacles[i].y + 0.5);
             float d = sqrt(dx*dx + dy*dy) - 0.5f;
             if(d < rho && d > 0.1f){
                 float F = eta * (1.0f/d - 1.0f/rho) / (d*d);
@@ -238,8 +287,8 @@ int main(int argc, char *argv[]) {
         if(dB < rho) repWallFy -= eta * (1.0f/dB - 1.0f/rho)/(dB*dB);
 
         // Somma forze e limitazione
-        float totFx = drn.Fx + repFx + repWallFx;
-        float totFy = drn.Fy + repFy + repWallFy;
+        float totFx = drn.Fx + repFx + repWallFx - abtrFx;
+        float totFy = drn.Fy + repFy + repWallFy - abtrFy;
         float forceMag = sqrt(totFx*totFx + totFy*totFy);
         if(forceMag > MAX_FORCE){
             totFx = totFx/forceMag*MAX_FORCE;
@@ -254,8 +303,8 @@ int main(int argc, char *argv[]) {
 
         // Controllo collisioni con ostacoli
         for(int i=0; i<num_obstacles; i++){
-            float dx = drn.x - obstacles[i].x;
-            float dy = drn.y - obstacles[i].y;
+            float dx = drn.x - (float)obstacles[i].x;
+            float dy = drn.y - (float)obstacles[i].y;
             float d = sqrt(dx*dx + dy*dy);
             if(d <= 0.1f){
                 drn.x = drn.x_1;
@@ -266,7 +315,7 @@ int main(int argc, char *argv[]) {
 
         current_state = STATE_SENDING_OUTPUT;
         send_position(msg, drn.x, drn.y, fd_out);
-        send_forces(msg, fd_out, drn.Fx, drn.Fy, repFx, repFy, repWallFx, repWallFy);
+        send_forces(msg, fd_out, drn.Fx, drn.Fy, repFx, repFy, repWallFx, repWallFy, abtrFx, abtrFy);
 
         current_state = STATE_IDLE;
         

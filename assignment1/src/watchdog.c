@@ -7,18 +7,19 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <sys/file.h>
+#include <stdarg.h> // <--- NECESSARIO PER GESTIRE I MESSAGGI VARIABILI
 
 #include "process_pid.h" 
 #include "log.h" 
 
 #define LOG_PATH "logs/watchdog.log"
-#define TIMEOUT_US 200000 // 200ms di attesa massima per OGNI processo
-#define CYCLE_DELAY 2     // Pausa tra un ciclo di controllo completo e l'altro
+#define TIMEOUT_US 200000
+#define CYCLE_DELAY 2
 
 typedef struct {
     pid_t pid;
     char name[32];
-    // 'volatile' è essenziale perché viene modificato dal signal handler
     volatile int alive;          
 } ProcessInfo;
 
@@ -26,11 +27,40 @@ typedef struct {
 static ProcessInfo process_map[MAX_PROCESSES];
 static int process_count = 0;
 
-void publish_watchdog_pid() {
-    FILE *f = fopen(PID_FILE_PATH, "w"); 
-    if (!f) { perror("fopen"); exit(1); }
-    fprintf(f, "%s %d\n", WD_PID_TAG, getpid());
-    fclose(f);
+// =============================================================
+// FUNZIONE WRAPPER LOCALE PER LOGGARE SU FILE E CONSOLE
+// =============================================================
+void w_log(const char *format, ...) {
+    va_list args;
+    char buffer[1024]; // Buffer per contenere il messaggio formattato
+
+    // 1. Formatta la stringa nel buffer
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    // 2. Stampa su CONSOLE (stdout) con timestamp semplice opzionale
+    // Nota: logMessage aggiunge il timestamp nel file, qui lo aggiungiamo a video
+    // se lo vuoi pulito togli la parte del time_t
+    time_t t = time(NULL);
+    struct tm tm_info;
+    localtime_r(&t, &tm_info);
+    char timebuf[32];
+    strftime(timebuf, sizeof(timebuf), "%H:%M:%S", &tm_info);
+    
+    printf("[%s] %s\n", timebuf, buffer);
+    fflush(stdout); // Importante per vedere subito il messaggio
+
+    // 3. Stampa su FILE (chiama la vecchia funzione)
+    // Passiamo "%s", buffer per evitare problemi se il messaggio contiene %
+    logMessage(LOG_PATH, "%s", buffer);
+}
+
+// =============================================================
+
+void publish_my_pid(FILE *fp) {
+    fprintf(fp, "%s %d\n",WD_PID_TAG, getpid());
+    w_log("[WATCHDOG] PID published securely");
 }
 
 void refresh_process_registry() {
@@ -83,18 +113,40 @@ int main() {
     signal(SIGUSR1, SIG_IGN); 
     remove(PID_FILE_PATH);
 
-    logMessage(LOG_PATH, "[WATCHDOG] Starting... PID: %d", getpid());
-    publish_watchdog_pid();
+    // Sostituito logMessage con w_log
+    w_log("[WATCHDOG] Starting... PID: %d", getpid());
 
+    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+    if (!fp_pid) {
+        w_log("[WATCHDOG] Error opening PID file!");
+        exit(1);
+    }
+
+    // 1. ACQUISISCI LOCK
+    int fd_pid = fileno(fp_pid);
+    flock(fd_pid, LOCK_EX); 
+
+    // 2. CHIAMA FUNZIONE DI SCRITTURA
+    publish_my_pid(fp_pid);
+
+    // 3. FLUSH PER FORZARE SCRITTURA SU DISCO
+    fflush(fp_pid);
+
+    // 4. RILASCIA LOCK
+    flock(fd_pid, LOCK_UN);
+
+    // 5. CHIUDI
+    fclose(fp_pid);
+    
     struct sigaction sa_pong = {0};
     sa_pong.sa_sigaction = pong_handler;
     sigemptyset(&sa_pong.sa_mask);
     sa_pong.sa_flags = SA_RESTART | SA_SIGINFO; 
     sigaction(SIGUSR2, &sa_pong, NULL);
 
-    logMessage(LOG_PATH, "[WATCHDOG] Warm-up phase (4 seconds)...");
+    w_log("[WATCHDOG] Warm-up phase (4 seconds)...");
     sleep(4); 
-    logMessage(LOG_PATH, "[WATCHDOG] Warm-up complete. Monitoring started.");
+    w_log("[WATCHDOG] Warm-up complete. Monitoring started.");
 
     while (1) {
         refresh_process_registry();
@@ -114,7 +166,6 @@ int main() {
             kill(process_map[i].pid, SIGUSR1);
 
             // 3. Attesa attiva della risposta (Polling veloce)
-            // Aspettiamo fino a TIMEOUT_US microsecondi (es. 200ms)
             int elapsed = 0;
             int step = 5000; // Controlla ogni 5ms
             
@@ -125,26 +176,22 @@ int main() {
 
             // 4. Verifica immediata
             if (process_map[i].alive == 1) {
-                // Successo: il processo ha risposto. Passiamo subito al prossimo!
-                // (Opzionale: logga solo se serve debug intenso, altrimenti intasa)
-                // logMessage(LOG_PATH, "[OK] %s is alive", process_map[i].name);
+                // Successo
             } else {
-                // Fallimento: Timeout scaduto per questo specifico processo
-                logMessage(LOG_PATH, "[WATCHDOG] ALERT! Process %s [PID %d] timed out after %d ms!", 
+                // Fallimento: Timeout
+                w_log("[WATCHDOG] ALERT! Process %s [PID %d] timed out after %d ms!", 
                            process_map[i].name, process_map[i].pid, elapsed/1000);
                 
-                const char *msg = "[WATCHDOG] Killing system due to unresponsive process.\n";
-                write(STDERR_FILENO, msg, strlen(msg));
+                // Nota: w_log scrive già su console, quindi non serve write(STDERR...)
+                w_log("[WATCHDOG] Killing system due to unresponsive process.");
                 kill(0, SIGKILL); 
                 exit(1);
             }
         }
         
-        // Se siamo qui, tutti i processi sono vivi.
-        // Log riassuntivo (più pulito)
-        logMessage(LOG_PATH, "[WATCHDOG] All %d processes checked and healthy.", process_count);
-
-        // Attesa prima del prossimo giro di controlli
+        // Log riassuntivo
+        w_log("[WATCHDOG] All %d processes checked and healthy.", process_count);
+        
         sleep(CYCLE_DELAY);
     }
 }

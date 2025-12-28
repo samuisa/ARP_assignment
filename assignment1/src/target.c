@@ -9,6 +9,8 @@
 #include <math.h>
 #include <signal.h>
 #include <sys/select.h>
+#include <sys/stat.h>
+#include <sys/file.h>
 
 #include "app_common.h"
 #include "log.h"
@@ -23,43 +25,36 @@ typedef enum { STATE_INIT, STATE_WAITING, STATE_GENERATING } ProcessState;
 static volatile sig_atomic_t current_state = STATE_INIT;
 
 // Funzione per dire al mondo che esistiamo
-void publish_my_pid() {
-    FILE *fp = fopen(PID_FILE_PATH, "a");
-    if (!fp) {
-        perror("Errore apertura file PID");
-        exit(1);
-    }
+void publish_my_pid(FILE *fp) {
     fprintf(fp, "%s %d\n", TARGET_PID_TAG, getpid());
-    fclose(fp);
+    logMessage(LOG_PATH, "[TARG] PID published securely");
 }
 
-// Funzione bloccante che aspetta finché il Watchdog non scrive il suo PID
-void wait_for_watchdog() {
+void wait_for_watchdog_pid() {
     FILE *fp;
     char line[256], tag[128];
-    int pid;
-    bool found = false;
+    int pid_temp;
+    bool wd_found = false;
 
-    while(!found) {
+    logMessage(LOG_PATH, "[TARG] Waiting for Watchdog...");
+
+    while (!wd_found) {
         fp = fopen(PID_FILE_PATH, "r");
-        if(fp) {
-            while(fgets(line, sizeof(line), fp)) {
-                // Cerca la riga che inizia con il tag del Watchdog
-                if(sscanf(line, "%s %d", tag, &pid) == 2) {
-                    if(strcmp(tag, WD_PID_TAG) == 0) {
-                        watchdog_pid = pid; 
-                        found = true; 
+        if (fp) {
+            while (fgets(line, sizeof(line), fp)) {
+                if (sscanf(line, "%s %d", tag, &pid_temp) == 2) {
+                    if (strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = (pid_t)pid_temp;
+                        wd_found = true;
                         break;
                     }
                 }
             }
             fclose(fp);
         }
-        
-        if(!found) {
-            usleep(100000); // Dorme 100ms prima di riprovare
-        }
+        if (!wd_found) usleep(200000);
     }
+    logMessage(LOG_PATH, "[TARG] Watchdog found (PID %d)", watchdog_pid);
 }
 
 // Handler per il segnale SIGUSR1 inviato dal Watchdog
@@ -88,16 +83,17 @@ Point* generate_targets(int width, int height, Point* obstacles, int num_obstacl
             // Genera coordinate (evitando i bordi)
             arr[i].x = rand() % (width - 2) + 1;
             arr[i].y = rand() % (height - 2) + 1;
-            
-            // Controllo sovrapposizione con altri target appena creati
             for (int j = 0; j < i; j++) {
                 if (arr[i].x == arr[j].x && arr[i].y == arr[j].y) { valid = 0; break; }
             }
-            // Controllo sovrapposizione con ostacoli
             for (int j = 0; j < num_obstacles && valid; j++) {
                 if (arr[i].x == obstacles[j].x && arr[i].y == obstacles[j].y) { valid = 0; break; }
             }
         } while (!valid);
+    }
+    logMessage(LOG_PATH, "[TARG] Generated %d targets", count);
+    for(int i=0; i<count; i++){
+        logMessage(LOG_PATH, "[TARG] targets %d position: %d %d", i, arr[i].x, arr[i].y);
     }
     *num_out = count;
     return arr;
@@ -118,24 +114,38 @@ int main(int argc, char *argv[]) {
 
     logMessage(LOG_PATH, "[TARG] Started with PID: %d", getpid());
 
-    // --- FASE 1: PREPARAZIONE SEGNALI ---
-    // Installiamo il gestore PRIMA di fare qualsiasi altra cosa.
-    // Se il watchdog ci contatta, siamo pronti a gestire (anche se non a rispondere subito).
     struct sigaction sa;
     sa.sa_handler = watchdog_ping_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGUSR1, &sa, NULL);
 
-    // --- FASE 2: TROVA IL WATCHDOG ---
-    // Aspettiamo finché il watchdog non è online.
-    wait_for_watchdog(); 
+    // PASSO A: Aspetta il watchdog (SENZA LOCK per evitare deadlock)
+    wait_for_watchdog_pid();
 
-    // --- FASE 3: REGISTRAZIONE ---
-    // Ora che siamo pronti e sappiamo chi è il watchdog, scriviamo il nostro PID.
-    publish_my_pid();
+    // PASSO B: Scrivi il proprio PID (CON LOCK come richiesto)
+    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+    if (!fp_pid) {
+        logMessage(LOG_PATH, "[TARG] Error opening PID file!");
+        exit(1);
+    }
 
-    // --- FASE 4: LOOP PRINCIPALE ---
+    // 1. ACQUISISCI LOCK
+    int fd_pid = fileno(fp_pid);
+    flock(fd_pid, LOCK_EX); 
+
+    // 2. CHIAMA FUNZIONE DI SCRITTURA
+    publish_my_pid(fp_pid);
+
+    // 3. FLUSH PER FORZARE SCRITTURA SU DISCO
+    fflush(fp_pid);
+
+    // 4. RILASCIA LOCK
+    flock(fd_pid, LOCK_UN);
+
+    // 5. CHIUDI
+    fclose(fp_pid);
+
     while (1) {
         current_state = STATE_WAITING;
         fd_set set;
@@ -143,19 +153,15 @@ int main(int argc, char *argv[]) {
         FD_SET(fd_in, &set);
         struct timeval tv;
         tv.tv_sec = 0;
-        tv.tv_usec = 200000; // Timeout breve per rendere reattivo il ciclo
-
+        tv.tv_usec = 200000;
         int ret = select(fd_in + 1, &set, NULL, NULL, &tv);
         
         // Gestione errori select
         if (ret < 0) {
             if (errno == EINTR) {
-                // Siamo stati interrotti da un segnale (probabilmente il Watchdog)
-                // Non è un errore, riprendiamo il ciclo.
                 continue; 
             }
             logMessage(LOG_PATH, "[TARG] ERROR select(): %s", strerror(errno));
-            // In caso di errore grave sulla pipe, meglio uscire o gestire
             break; 
         }
 

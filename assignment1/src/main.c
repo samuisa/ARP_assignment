@@ -227,7 +227,8 @@ int main(void) {
         close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
 
         // Lancio watchdog senza argomenti (si sincronizza via file PID)
-        execlp("./exec/watchdog", "./exec/watchdog", NULL);
+        execlp("konsole", "konsole", "-e",
+               "./exec/watchdog", NULL);
 
         perror("exec watchdog");
         exit(1);

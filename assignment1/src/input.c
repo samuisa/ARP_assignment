@@ -6,6 +6,8 @@
 #include <signal.h>
 #include <errno.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <sys/file.h>
 
 #include "process_pid.h"
 #include "app_common.h" // Definizione Message, MSG_TYPE_PID, ecc.
@@ -41,41 +43,36 @@ void draw_legend() {
     refresh();
 }
 
-void publish_my_pid() {
-    FILE *fp = fopen(PID_FILE_PATH, "a");
-    if (!fp) exit(1);
+void publish_my_pid(FILE *fp) {
     fprintf(fp, "%s %d\n", INPUT_PID_TAG, getpid());
-    fclose(fp);
+    logMessage(LOG_PATH, "[INPUT] PID published securely");
 }
 
-void wait_for_watchdog() {
+void wait_for_watchdog_pid() {
     FILE *fp;
     char line[256], tag[128];
-    int pid;
-    bool found = false;
-    
-    printf("[INPUT] In attesa del Watchdog...\n");
-    fflush(stdout);
+    int pid_temp;
+    bool wd_found = false;
 
-    while(!found) {
+    logMessage(LOG_PATH, "[INPUT] Waiting for Watchdog...");
+
+    while (!wd_found) {
         fp = fopen(PID_FILE_PATH, "r");
-        if(fp) {
-            while(fgets(line, sizeof(line), fp)) {
-                if(sscanf(line, "%s %d", tag, &pid) == 2) {
-                    if(strcmp(tag, WD_PID_TAG) == 0) {
-                        watchdog_pid = pid; 
-                        found = true; 
+        if (fp) {
+            while (fgets(line, sizeof(line), fp)) {
+                if (sscanf(line, "%s %d", tag, &pid_temp) == 2) {
+                    if (strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = (pid_t)pid_temp;
+                        wd_found = true;
                         break;
                     }
                 }
             }
             fclose(fp);
         }
-        if(!found) usleep(100000);
+        if (!wd_found) usleep(200000);
     }
-    printf("[INPUT] Watchdog trovato! PID: %d\n", watchdog_pid);
-    printf("[INPUT] Controlli attivi (premi i tasti, non vedrai nulla a schermo)\n");
-    fflush(stdout);
+    logMessage(LOG_PATH, "[INPUT] Watchdog found (PID %d)", watchdog_pid);
 }
 
 void watchdog_ping_handler(int signo) {
@@ -97,8 +94,24 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGUSR1, &sa, NULL);
 
-    wait_for_watchdog();
-    publish_my_pid();
+    wait_for_watchdog_pid();
+
+    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+    if (!fp_pid) {
+        logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
+        exit(1);
+    }
+
+    int fd_pid = fileno(fp_pid);
+    flock(fd_pid, LOCK_EX); 
+
+    publish_my_pid(fp_pid);
+
+    fflush(fp_pid);
+
+    flock(fd_pid, LOCK_UN);
+
+    fclose(fp_pid);
     
     int ch;
     char msg_buf[2];

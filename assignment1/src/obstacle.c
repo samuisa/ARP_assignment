@@ -8,6 +8,8 @@
 #include <math.h>
 #include <signal.h>
 #include <sys/select.h>
+#include <sys/stat.h>
+#include <sys/file.h>
 
 #include "app_common.h"
 #include "log.h"
@@ -17,33 +19,36 @@ typedef enum { STATE_INIT, STATE_WAITING, STATE_GENERATING } ProcessState;
 static volatile sig_atomic_t current_state = STATE_INIT;
 static volatile pid_t watchdog_pid = -1; // Volatile per i segnali
 
-void publish_my_pid() {
-    FILE *f = fopen(PID_FILE_PATH, "a");
-    if (!f) exit(1);
-    fprintf(f, "%s %d\n", OBSTACLE_PID_TAG, getpid());
-    fclose(f);
+void publish_my_pid(FILE *fp) {
+    fprintf(fp, "%s %d\n", OBSTACLE_PID_TAG, getpid());
+    logMessage(LOG_PATH, "[OBST] PID published securely");
 }
 
-void wait_for_watchdog() {
-    FILE *f;
-    char line[128], tag[64];
-    int pid;
-    bool found = false;
+void wait_for_watchdog_pid() {
+    FILE *fp;
+    char line[256], tag[128];
+    int pid_temp;
+    bool wd_found = false;
 
-    while(!found) {
-        f = fopen(PID_FILE_PATH, "r");
-        if(f) {
-            while(fgets(line, sizeof(line), f)) {
-                if(sscanf(line, "%s %d", tag, &pid) == 2) {
-                    if(strcmp(tag, WD_PID_TAG) == 0) {
-                        watchdog_pid = pid; found = true; break;
+    logMessage(LOG_PATH, "[OBST] Waiting for Watchdog...");
+
+    while (!wd_found) {
+        fp = fopen(PID_FILE_PATH, "r");
+        if (fp) {
+            while (fgets(line, sizeof(line), fp)) {
+                if (sscanf(line, "%s %d", tag, &pid_temp) == 2) {
+                    if (strcmp(tag, WD_PID_TAG) == 0) {
+                        watchdog_pid = (pid_t)pid_temp;
+                        wd_found = true;
+                        break;
                     }
                 }
             }
-            fclose(f);
+            fclose(fp);
         }
-        if(!found) usleep(100000);
+        if (!wd_found) usleep(200000);
     }
+    logMessage(LOG_PATH, "[OBST] Watchdog found (PID %d)", watchdog_pid);
 }
 
 void watchdog_ping_handler(int sig) {
@@ -78,6 +83,9 @@ Point* generate_obstacles(int width, int height, int* num_out) {
         } while (!valid);
     }
     logMessage(LOG_PATH, "[OBST] Generated %d obstacles", count);
+    for(int i=0; i<count; i++){
+        logMessage(LOG_PATH, "[OBST] obstacles %d position: %d %d", i, arr[i].x, arr[i].y);
+    }
     *num_out = count;
     return arr;
 }
@@ -97,11 +105,31 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGUSR1, &sa, NULL);
 
-    // 2. Trova Watchdog (COSI' watchdog_pid VIENE IMPOSTATO!)
-    wait_for_watchdog();
+    // PASSO A: Aspetta il watchdog (SENZA LOCK per evitare deadlock)
+    wait_for_watchdog_pid();
 
-    // 3. Pubblica il proprio PID (SOLO ORA il Watchdog inizierà a pingarti)
-    publish_my_pid();
+    // PASSO B: Scrivi il proprio PID (CON LOCK come richiesto)
+    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+    if (!fp_pid) {
+        logMessage(LOG_PATH, "[OBST] Error opening PID file!");
+        exit(1);
+    }
+
+    // 1. ACQUISISCI LOCK
+    int fd_pid = fileno(fp_pid);
+    flock(fd_pid, LOCK_EX); 
+
+    // 2. CHIAMA FUNZIONE DI SCRITTURA
+    publish_my_pid(fp_pid);
+
+    // 3. FLUSH PER FORZARE SCRITTURA SU DISCO
+    fflush(fp_pid);
+
+    // 4. RILASCIA LOCK
+    flock(fd_pid, LOCK_UN);
+
+    // 5. CHIUDI
+    fclose(fp_pid);
 
     while (1) {
         current_state = STATE_WAITING;
