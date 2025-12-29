@@ -24,7 +24,7 @@
 #define MAX_FORCE 10.0f
 // Nota: EPSILON qui ridotto rispetto all'originale
 #define EPSILON 1e-6f
-#define rho 5.0f
+#define rho 8.0f
 #define eta 5.0f
 
 // ----- MODEL STRUCTURES -----

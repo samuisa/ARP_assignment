@@ -44,6 +44,7 @@ int main(void) {
     int pipe_obstacle_blackboard[2];
     int pipe_blackboard_target[2];
     int pipe_target_blackboard[2];
+    int pipe_blackboard_watchdog[2];
 
     /* NOTA: Le pipe del Watchdog sono state rimosse.
        La comunicazione avverrà tramite segnali e file PID.
@@ -55,7 +56,8 @@ int main(void) {
         pipe(pipe_blackboard_obstacle) == -1 ||
         pipe(pipe_obstacle_blackboard) == -1 ||
         pipe(pipe_blackboard_target) == -1 ||
-        pipe(pipe_target_blackboard) == -1) {
+        pipe(pipe_target_blackboard) == -1 || 
+        pipe(pipe_blackboard_watchdog) == -1) {
 
         perror("pipe");
         logMessage(LOG_PATH, "[MAIN] ERROR creating application pipes");
@@ -82,6 +84,7 @@ int main(void) {
         close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
         close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
         close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+        close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
 
         char fd_out[16];
         snprintf(fd_out, sizeof(fd_out), "%d", pipe_input_blackboard[1]);
@@ -108,6 +111,7 @@ int main(void) {
         close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
         close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
         close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+        close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
 
         char fd_in[16], fd_out[16];
         snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_obstacle[0]);
@@ -135,6 +139,7 @@ int main(void) {
         close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
         close(pipe_blackboard_obstacle[0]); close(pipe_blackboard_obstacle[1]);
         close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
+        close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
 
         char fd_in[16], fd_out[16];
         snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_target[0]);
@@ -160,10 +165,11 @@ int main(void) {
         close(pipe_obstacle_blackboard[1]);
         close(pipe_blackboard_target[0]);
         close(pipe_target_blackboard[1]);
+        close(pipe_blackboard_watchdog[0]);
 
         char fd_in_input[16], fd_in_drone[16];
         char fd_out_drone[16], fd_out_obst[16];
-        char fd_in_obst[16], fd_out_target[16], fd_in_target[16];
+        char fd_in_obst[16], fd_out_target[16], fd_in_target[16], fd_out_wd[16];
 
         snprintf(fd_in_input,  sizeof(fd_in_input),  "%d", pipe_input_blackboard[0]);
         snprintf(fd_in_drone,  sizeof(fd_in_drone),  "%d", pipe_drone_blackboard[0]);
@@ -172,6 +178,7 @@ int main(void) {
         snprintf(fd_in_obst,   sizeof(fd_in_obst),   "%d", pipe_obstacle_blackboard[0]);
         snprintf(fd_out_target,sizeof(fd_out_target),"%d", pipe_blackboard_target[1]);
         snprintf(fd_in_target, sizeof(fd_in_target), "%d", pipe_target_blackboard[0]);
+        snprintf(fd_out_wd, sizeof(fd_out_wd), "%d", pipe_blackboard_watchdog[1]);
 
         // Lancio blackboard senza pipe watchdog
         execlp("konsole", "konsole", "-e",
@@ -179,7 +186,7 @@ int main(void) {
                fd_in_input, fd_in_drone,
                fd_out_drone, fd_out_obst,
                fd_in_obst, fd_out_target,
-               fd_in_target, NULL);
+               fd_in_target, fd_out_wd, NULL);
 
         perror("exec blackboard");
         exit(1);
@@ -199,6 +206,7 @@ int main(void) {
         close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
         close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
         close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+        close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
 
         char fd_in[16], fd_out[16];
         snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_drone[0]);
@@ -225,10 +233,15 @@ int main(void) {
         close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
         close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
         close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+        close(pipe_blackboard_watchdog[1]);
+
+        char fd_in_bb[16];
+
+        snprintf(fd_in_bb, sizeof(fd_in_bb), "%d", pipe_blackboard_watchdog[0]);
 
         // Lancio watchdog senza argomenti (si sincronizza via file PID)
         execlp("konsole", "konsole", "-e",
-               "./exec/watchdog", NULL);
+               "./exec/watchdog", fd_in_bb, NULL);
 
         perror("exec watchdog");
         exit(1);
@@ -246,6 +259,7 @@ int main(void) {
     close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
     close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
     close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+    close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
 
     logMessage(LOG_PATH,
         "[MAIN] All processes running (input=%d drone=%d bb=%d obst=%d targ=%d)",

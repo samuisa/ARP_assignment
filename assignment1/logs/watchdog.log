@@ -1,15 +1,5 @@
-[2025-12-28 15:16:48] (PID 13480) [WATCHDOG] Starting... PID: 13480
-[2025-12-28 15:16:48] (PID 13480) [WATCHDOG] PID published securely
-[2025-12-28 15:16:48] (PID 13480) [WATCHDOG] Warm-up phase (4 seconds)...
-[2025-12-28 15:16:52] (PID 13480) [WATCHDOG] Warm-up complete. Monitoring started.
-[2025-12-28 15:16:52] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:16:54] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:16:56] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:16:58] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:00] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:02] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:04] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:06] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:08] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:10] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
-[2025-12-28 15:17:12] (PID 13480) [WATCHDOG] All 5 processes checked and healthy.
+[2025-12-29 12:19:35] (PID 7870) [WATCHDOG] Starting... PID: 7870
+[2025-12-29 12:19:35] (PID 7870) [WATCHDOG] PID published securely
+[2025-12-29 12:19:35] (PID 7870) [WATCHDOG] Warm-up phase (4 seconds)...
+[2025-12-29 12:19:39] (PID 7870) [WATCHDOG] Warm-up complete. Monitoring started.
+[2025-12-29 12:19:39] (PID 7870) [WD] Terminated Successfully

@@ -328,7 +328,7 @@ void send_resize(WINDOW *win, int fd_drone) {
  */
 int main(int argc, char *argv[]) {
     // 1. Argument Parsing (File Descriptors for Pipes)
-    if (argc < 8) {
+    if (argc < 9) {
         fprintf(stderr, "[BB] Error: Needed 7 file descriptors, received %d\n", argc-1);
         return 1;
     }
@@ -340,6 +340,7 @@ int main(int argc, char *argv[]) {
     int fd_obst_read   = atoi(argv[5]);
     int fd_targ_write  = atoi(argv[6]);
     int fd_targ_read   = atoi(argv[7]);
+    int fd_wd_write    = atoi(argv[8]);
 
     // 2. Signal Setup
     signal(SIGPIPE, SIG_IGN); 
@@ -479,11 +480,15 @@ int main(int argc, char *argv[]) {
             ssize_t n = read(fd_input_read, buf, sizeof(buf)-1);
             if (n > 0) {
                 buf[n] = '\0';
-                if (buf[0] == 'q') break;
+                if (buf[0] == 'q'){
+                    write(fd_wd_write, buf, sizeof(buf));
+                    break;
+                }
                 // Forward keypress to the Drone Process
                 msg.type = MSG_TYPE_INPUT;
                 snprintf(msg.data, sizeof(msg.data), "%s", buf);
                 write(fd_drone_write, &msg, sizeof(Message));
+                
             }
         }
 

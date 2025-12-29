@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <ncurses.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <signal.h>
@@ -109,7 +110,16 @@ void pong_handler(int sig, siginfo_t *info, void *context) {
     }
 }
 
-int main() {
+int main(int argc, char *argv[]) {
+
+    if (argc < 2) {
+        fprintf(stderr, "[BB] Error: Needed 1 file descriptors, received %d\n", argc-1);
+        return 1;
+    }
+
+    int fd_bb_read  = atoi(argv[1]);
+
+
     signal(SIGUSR1, SIG_IGN); 
     remove(PID_FILE_PATH);
 
@@ -149,6 +159,12 @@ int main() {
     w_log("[WATCHDOG] Warm-up complete. Monitoring started.");
 
     while (1) {
+        char buf[80];
+        ssize_t n = read(fd_bb_read, buf, sizeof(buf)-1);
+
+        if(n>0){
+            break;
+        }
         refresh_process_registry();
 
         if (process_count == 0) {
@@ -194,4 +210,6 @@ int main() {
         
         sleep(CYCLE_DELAY);
     }
+    logMessage(LOG_PATH, "[WD] Terminated Successfully");
+    return 0;
 }
