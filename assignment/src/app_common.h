@@ -16,6 +16,7 @@
 #define PERC_TARG            0.001
 
 #define LOG_PATH "logs/system.log"
+#define LOG_PATH_SC "logs/server_client.log"
 
 // ----- DRONE DYNAMIC -----
 #define M 1

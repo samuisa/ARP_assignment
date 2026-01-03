@@ -1,23 +1,16 @@
-[2026-01-02 11:59:39] (PID 16727) [MAIN] PROGRAM STARTED
-[2026-01-02 11:59:39] (PID 16727) [MAIN] Application pipes created successfully
-[2026-01-02 11:59:39] (PID 16727) [MAIN] Watchdog started (pid=16733)
-[2026-01-02 11:59:39] (PID 16727) [MAIN] All processes running (input=16728 drone=16732 bb=16731 obst=16729 targ=16730)
-[2026-01-02 11:59:39] (PID 16730) [TARG] Started with PID: 16730
-[2026-01-02 11:59:39] (PID 16730) [TARG] Waiting for Watchdog...
-[2026-01-02 11:59:39] (PID 16729) [OBST] Started
-[2026-01-02 11:59:39] (PID 16729) [OBST] Waiting for Watchdog...
-[2026-01-02 11:59:39] (PID 16767) [BB] Create socket...
-[2026-01-02 11:59:39] (PID 16767) [BB] Create host...
-[2026-01-02 11:59:39] (PID 16767) [BB] NOT CONNECTED...
-[2026-01-02 11:59:39] (PID 16767) errno=17
-
-[2026-01-02 11:59:40] (PID 16729) [OBST] Watchdog found (PID 16765)
-[2026-01-02 11:59:40] (PID 16730) [TARG] Watchdog found (PID 16765)
-[2026-01-02 11:59:40] (PID 16729) [OBST] PID published securely
-[2026-01-02 11:59:40] (PID 16730) [TARG] PID published securely
-[2026-01-02 11:59:40] (PID 16730) [TARG] Pipe closed, exiting.
-[2026-01-02 11:59:40] (PID 16729) [OBST] Pipe closed, exiting.
-[2026-01-02 11:59:40] (PID 16774) [INPUT] Waiting for Watchdog...
-[2026-01-02 11:59:40] (PID 16774) [INPUT] Watchdog found (PID 16765)
-[2026-01-02 11:59:40] (PID 16774) [INPUT] PID published securely
-[2026-01-02 11:59:40] (PID 16774) [CTRL] Main started, fd_out=4
+[2026-01-03 14:00:49] (PID 14250) [MAIN] PROGRAM STARTED
+[2026-01-03 14:00:49] (PID 14250) [MAIN] Application pipes created successfully
+[2026-01-03 14:00:49] (PID 14250) [MAIN] Watchdog started (pid=14258)
+[2026-01-03 14:00:49] (PID 14250) [MAIN] All processes running (input=14253 drone=14257 bb=14256 obst=14254 targ=14255)
+[2026-01-03 14:00:49] (PID 14254) [OBST] Started
+[2026-01-03 14:00:49] (PID 14255) [TARG] Started with PID: 14255
+[2026-01-03 14:00:49] (PID 14255) [TARG] Waiting for Watchdog...
+[2026-01-03 14:00:49] (PID 14254) [OBST] Waiting for Watchdog...
+[2026-01-03 14:00:49] (PID 14308) [INPUT] Waiting for Watchdog...
+[2026-01-03 14:00:49] (PID 14255) [TARG] Watchdog found (PID 14312)
+[2026-01-03 14:00:49] (PID 14255) [TARG] PID published securely
+[2026-01-03 14:00:49] (PID 14254) [OBST] Watchdog found (PID 14312)
+[2026-01-03 14:00:49] (PID 14254) [OBST] PID published securely
+[2026-01-03 14:00:49] (PID 14308) [INPUT] Watchdog found (PID 14312)
+[2026-01-03 14:00:49] (PID 14308) [INPUT] PID published securely
+[2026-01-03 14:00:49] (PID 14308) [CTRL] Main started, fd_out=4

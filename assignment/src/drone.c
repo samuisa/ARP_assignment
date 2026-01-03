@@ -167,7 +167,10 @@ int main(int argc, char *argv[]) {
                     // Force Control Logic (Keys to Force Vector)
                     char ch = msg.data[0];
                     //logMessage(LOG_PATH, "[DRONE] Input received: '%c'", ch);
-                    if(ch == 'q') goto quit;
+                    if(ch == 'q') {
+                        goto quit;
+                        break;
+                    }
 
                     bool isValid = true;
                     switch(ch){
@@ -187,8 +190,9 @@ int main(int argc, char *argv[]) {
                             break;
                         default: isValid = false; break;
                     }
-                    if(isValid)
+                    if(isValid){
                         //logMessage(LOG_PATH, "[DRONE] Forces updated: Fx=%f Fy=%f", drn.Fx, drn.Fy);
+                    }
                     break;
                 }
 

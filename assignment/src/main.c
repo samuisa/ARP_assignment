@@ -77,6 +77,23 @@ int main(void) {
 
     /* --- SUB-SECTION: FORKING PROCESSES --- */
 
+
+    pid_t pid_server = fork();
+
+    if (pid_server == 0) {
+        execl("./exec/server", "server", NULL);
+        perror("exec server");
+        exit(1);
+    }
+
+    pid_t pid_client = fork();
+
+    if (pid_client == 0) {
+        execl("./exec/client", "client", NULL);
+        perror("exec client");
+        exit(1);
+    }
+
     /* 1. INPUT PROCESS (Runs in Konsole) */
     pid_t pid_input = fork();
     if (pid_input == 0) {

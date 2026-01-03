@@ -25,6 +25,8 @@
 #include "process_pid.h"
 #include "log.h"
 
+#define BUFSZ 256
+
 // --- STATE MONITORING STRUCTS (ADDED) ---
 typedef enum {
     STATE_INIT,
@@ -73,46 +75,87 @@ static pid_t watchdog_pid = -1;
  * SECTION 1: CONNESSIONE AL SERVER
  * ====================================================================================== */
 
-
 int connect_to_server(const char *host, int port) {
     int sockfd;
     struct sockaddr_in serv_addr;
     struct hostent *server;
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        perror("[BB] socket");
-        logMessage(LOG_PATH, "[BB] NOT Create socket...");
-        exit(1);
+    while (1) {
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        if (sockfd < 0) {
+            perror("[BB] socket");
+            sleep(1);
+            continue;
+        }
+
+        server = gethostbyname(host);
+        if (!server) {
+            logMessage(LOG_PATH_SC, "[BB] host not found, retrying...");
+            printf("host not found, retrying...");
+            close(sockfd);
+            sleep(1);
+            continue;
+        }
+
+        bzero(&serv_addr, sizeof(serv_addr));
+        serv_addr.sin_family = AF_INET;
+        memcpy(&serv_addr.sin_addr.s_addr,
+               server->h_addr,
+               server->h_length);
+        serv_addr.sin_port = htons(port);
+
+        if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == 0) {
+            logMessage(LOG_PATH_SC, "[BB->SERVER] CONNECTED to server");
+            return sockfd;
+        }
+
+        logMessage(LOG_PATH_SC, "[BB->SERVER] connect failed (errno=%d), retrying...", errno);
+        close(sockfd);
+        sleep(1);
     }
+}
 
-    logMessage(LOG_PATH, "[BB] Create socket...");
+int connect_to_client(const char *host, int port) {
+    int sockfd;
+    struct sockaddr_in cli_addr;
+    struct hostent *server;
 
-    server = gethostbyname(host);
-    if (!server) {
-        fprintf(stderr, "[BB] no such host\n");
-        logMessage(LOG_PATH, "[BB] NOT Create host...");
-        exit(1);
+    while (1) {
+        // 1. Creazione socket
+        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        if (sockfd < 0) {
+            perror("[BB->CLIENT] socket");
+            sleep(1);
+            continue;
+        }
+
+        // 2. Risoluzione hostname
+        server = gethostbyname(host);
+        if (!server) {
+            logMessage(LOG_PATH_SC, "[BB->CLIENT] host '%s' not found, retrying in 1s...", host);
+            close(sockfd);
+            sleep(1);
+            continue;
+        }
+
+        // 3. Setup indirizzo client
+        bzero(&cli_addr, sizeof(cli_addr));
+        cli_addr.sin_family = AF_INET;
+        memcpy(&cli_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+        cli_addr.sin_port = htons(port);
+
+        // 4. Tentativo di connessione
+        if (connect(sockfd, (struct sockaddr *)&cli_addr, sizeof(cli_addr)) == 0) {
+            logMessage(LOG_PATH_SC, "[BB->CLIENT] Connected to client %s:%d", host, port);
+            return sockfd;
+        }
+
+        // 5. Connessione fallita: chiudo e riprovo
+        logMessage(LOG_PATH_SC, "[BB->CLIENT] connect to %s:%d failed (errno=%d, %s), retrying in 1s...",
+                   host, port, errno, strerror(errno));
+        close(sockfd);
+        sleep(1);  // Retry lento per dare tempo al client di mettersi in ascolto
     }
-
-    logMessage(LOG_PATH, "[BB] Create host...");
-
-    bzero(&serv_addr, sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    memcpy(&serv_addr.sin_addr.s_addr,
-           server->h_addr,
-           server->h_length);
-    serv_addr.sin_port = htons(port);
-
-    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        perror("[BB] connect");
-        logMessage(LOG_PATH, "[BB] NOT CONNECTED...");
-        logMessage(LOG_PATH, "errno=%d\n", errno);
-        exit(1);
-    }
-    logMessage(LOG_PATH, "[BB] CONNECTED...");
-
-    return sockfd;
 }
 
 
@@ -344,6 +387,28 @@ void reposition_and_redraw(WINDOW **win_ptr) {
  * Helper functions to send window dimensions to other processes.
  * ====================================================================================== */
 
+ ssize_t send_msg(int fd, const char *msg) {
+    ssize_t n = write(fd, msg, strlen(msg));
+    if (n < 0) {
+        perror("write");
+        exit(EXIT_FAILURE);
+    }
+    logMessage(LOG_PATH, "[BB] Sent: '%s'", msg);
+    return n;
+}
+
+ssize_t recv_msg(int fd, char *buf, size_t bufsz) {
+    bzero(buf, bufsz);
+    ssize_t n = read(fd, buf, bufsz - 1);
+    if (n < 0) {
+        perror("read");
+        exit(EXIT_FAILURE);
+    }
+    buf[n] = '\0';
+    logMessage(LOG_PATH, "[BB] Received: '%s'", buf);
+    return n;
+}
+
 void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ, int server_fd) {
     set_state(STATE_BROADCASTING); // Update State
     Message msg;
@@ -396,7 +461,15 @@ int main(int argc, char *argv[]) {
     int fd_wd_write    = atoi(argv[8]);
 
     int server_fd = connect_to_server("localhost", 5000);
-    logMessage(LOG_PATH, "[BB] Connected to server");
+    logMessage(LOG_PATH_SC, "[BB] Connected to server");
+
+    int client_fd = connect_to_client("localhost", 5001); // attenzione alla porta
+    send_msg(client_fd, "BB\n"); // dici al client chi sei
+    logMessage(LOG_PATH_SC, "[BB] Sent identity to client");
+
+
+    send_msg(server_fd, "BB\n");
+    logMessage(LOG_PATH_SC, "[BB] Sent identity to server");
 
 
     signal(SIGPIPE, SIG_IGN); 
@@ -501,11 +574,16 @@ int main(int argc, char *argv[]) {
         FD_SET(fd_drone_read, &readfds);
         FD_SET(fd_obst_read, &readfds);
         FD_SET(fd_targ_read, &readfds); 
+        FD_SET(server_fd, &readfds); 
+        FD_SET(client_fd, &readfds); 
+
         
         int maxfd = fd_input_read;
         if (fd_drone_read > maxfd) maxfd = fd_drone_read;
         if (fd_obst_read > maxfd) maxfd = fd_obst_read;
         if (fd_targ_read > maxfd) maxfd = fd_targ_read;
+        if (server_fd > maxfd) maxfd = server_fd;
+        if (client_fd > maxfd) maxfd = client_fd;
         maxfd += 1;
 
         tv.tv_sec  = 0;
@@ -549,6 +627,7 @@ int main(int argc, char *argv[]) {
                     // Collision Logic: Drone vs Targets
                     int dx = (int)current_x;
                     int dy = (int)current_y;
+
                     for (int i = 0; i < num_targets; i++) {
                         if (dx == (int)targets[i].x && dy == (int)targets[i].y) {
                             // Remove target
@@ -647,6 +726,38 @@ int main(int argc, char *argv[]) {
                 redraw_scene(win);
             }
         }
+
+        if (FD_ISSET(server_fd, &readfds)) {
+            char buf[BUFSZ];
+            recv_msg(server_fd, buf, sizeof(buf));
+
+            if (strncmp(buf, "drone", 5) == 0) {
+                char drone_msg[64];
+                snprintf(drone_msg, sizeof(drone_msg), "%d %d\n", (int)current_x, (int)current_y);
+                send_msg(server_fd, drone_msg);
+                logMessage(LOG_PATH_SC, "[BB] Drone position sent to server: %s", drone_msg);
+            }
+        }
+
+        if (FD_ISSET(client_fd, &readfds)) {
+            char buf[BUFSZ];
+            recv_msg(client_fd, buf, sizeof(buf));
+            
+            if (strncmp(buf, "send_obst", 9) == 0) {
+                // Costruisci stringa ostacoli
+                char obst_msg[BUFSZ];
+                int offset = 0;
+                for (int i = 0; i < num_obstacles; i++) {
+                    offset += snprintf(obst_msg + offset, sizeof(obst_msg) - offset,
+                                    "%d %d;", obstacles[i].x, obstacles[i].y);
+                }
+                strncat(obst_msg, "\n", sizeof(obst_msg) - strlen(obst_msg) - 1);
+                
+                send_msg(client_fd, obst_msg);
+                logMessage(LOG_PATH_SC, "[BB] Obstacles sent to client: %s", obst_msg);
+            }
+        }
+
     }
 
     close(server_fd);

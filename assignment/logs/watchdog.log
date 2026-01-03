@@ -1,6 +1,24 @@
-[2026-01-02 11:59:39] (PID 16765) [WATCHDOG] Starting... PID: 16765
-[2026-01-02 11:59:39] (PID 16765) [WATCHDOG] PID published securely
-[2026-01-02 11:59:39] (PID 16765) [WATCHDOG] Warm-up phase (4 seconds)...
-[2026-01-02 11:59:43] (PID 16765) [WATCHDOG] Warm-up complete. Monitoring started.
-[2026-01-02 11:59:44] (PID 16765) [WATCHDOG] ALERT! Process OBSTACLE [PID 16729] timed out after 200 ms!
-[2026-01-02 11:59:44] (PID 16765) [WATCHDOG] Killing system due to unresponsive process.
+[2026-01-03 14:00:49] (PID 14312) [WATCHDOG] Starting... PID: 14312
+[2026-01-03 14:00:49] (PID 14312) [WATCHDOG] PID published securely
+[2026-01-03 14:00:49] (PID 14312) [WATCHDOG] Warm-up phase (4 seconds)...
+[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Warm-up complete. Monitoring started.
+[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
+[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
+[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
+[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
+[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
+[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
+[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
+[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
+[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
+[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
+[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
+[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
+[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
+[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
+[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
+[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
+[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
+[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
+[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
+[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
