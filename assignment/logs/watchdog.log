@@ -1,24 +1,262 @@
-[2026-01-03 14:00:49] (PID 14312) [WATCHDOG] Starting... PID: 14312
-[2026-01-03 14:00:49] (PID 14312) [WATCHDOG] PID published securely
-[2026-01-03 14:00:49] (PID 14312) [WATCHDOG] Warm-up phase (4 seconds)...
-[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Warm-up complete. Monitoring started.
-[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
-[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
-[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
-[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
-[2026-01-03 14:00:53] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
-[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
-[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
-[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
-[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
-[2026-01-03 14:00:55] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
-[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
-[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
-[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
-[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
-[2026-01-03 14:00:57] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
-[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process DRONE [PID 14257] is responsive!
-[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process TARGET [PID 14255] is responsive!
-[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process OBSTACLE [PID 14254] is responsive!
-[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] Process INPUT [PID 14308] is responsive!
-[2026-01-03 14:00:59] (PID 14312) [WATCHDOG] All 4 processes checked. Waiting next cycle...
+[2026-01-05 12:17:58] (PID 14414) [WATCHDOG] Starting... PID: 14414
+[2026-01-05 12:17:58] (PID 14414) [WATCHDOG] PID published securely
+[2026-01-05 12:17:58] (PID 14414) [WATCHDOG] Warm-up phase (4 seconds)...
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] Warm-up complete. Monitoring started.
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:02] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:04] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:04] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:04] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:04] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:04] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:04] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:06] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:06] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:06] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:06] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:06] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:06] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:08] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:08] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:08] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:08] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:08] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:08] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:10] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:10] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:10] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:10] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:10] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:10] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:12] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:12] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:12] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:12] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:12] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:12] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:14] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:14] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:14] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:14] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:14] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:14] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:16] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:16] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:16] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:16] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:16] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:16] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:18] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:18] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:18] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:18] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:18] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:18] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:20] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:20] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:20] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:20] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:20] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:20] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:22] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:22] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:22] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:22] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:22] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:22] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:24] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:24] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:24] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:24] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:24] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:24] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:26] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:26] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:26] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:26] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:26] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:26] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:28] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:28] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:28] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:28] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:28] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:28] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:30] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:30] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:30] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:30] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:30] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:30] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:32] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:32] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:32] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:32] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:32] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:32] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:34] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:34] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:34] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:34] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:34] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:34] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:36] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:36] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:36] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:36] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:36] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:36] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:38] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:38] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:38] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:38] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:38] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:38] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:40] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:40] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:40] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:40] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:40] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:40] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:42] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:42] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:42] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:42] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:42] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:42] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:44] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:44] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:44] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:44] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:44] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:44] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:46] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:46] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:46] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:46] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:46] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:46] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:48] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:48] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:48] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:48] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:48] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:48] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:50] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:50] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:50] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:50] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:50] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:50] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:52] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:52] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:52] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:52] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:52] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:52] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:54] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:54] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:54] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:54] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:54] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:54] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:56] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:56] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:56] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:56] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:56] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:56] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:18:58] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:18:58] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:18:58] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:18:58] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:18:58] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:18:58] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:00] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:00] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:00] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:00] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:00] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:00] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:02] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:02] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:02] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:02] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:02] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:02] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:04] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:04] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:04] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:04] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:04] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:04] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:06] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:06] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:06] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:06] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:06] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:06] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:08] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:08] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:08] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:08] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:08] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:08] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:10] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:10] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:10] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:10] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:10] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:10] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:12] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:12] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:12] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:12] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:12] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:12] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:14] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:14] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:14] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:14] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:14] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:14] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:16] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:16] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:16] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:16] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:16] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:16] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:18] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:18] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:18] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:18] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:18] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:18] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:20] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:20] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:20] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:20] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:20] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:20] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:22] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:22] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:22] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:22] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:22] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:22] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:24] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:24] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:24] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:24] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:24] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:24] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...
+[2026-01-05 12:19:26] (PID 14414) [WATCHDOG] Process INPUT [PID 14416] is responsive!
+[2026-01-05 12:19:26] (PID 14414) [WATCHDOG] Process BLACKBOARD [PID 14417] is responsive!
+[2026-01-05 12:19:26] (PID 14414) [WATCHDOG] Process DRONE [PID 14362] is responsive!
+[2026-01-05 12:19:26] (PID 14414) [WATCHDOG] Process OBSTACLE [PID 14363] is responsive!
+[2026-01-05 12:19:26] (PID 14414) [WATCHDOG] Process TARGET [PID 14364] is responsive!
+[2026-01-05 12:19:26] (PID 14414) [WATCHDOG] All 5 processes checked. Waiting next cycle...

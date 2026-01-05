@@ -19,6 +19,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netdb.h>
+#include <arpa/inet.h>
 
 #include "app_blackboard.h"
 #include "app_common.h"
@@ -50,6 +51,10 @@ void set_state(BBProcessState new_state) {
     bb_monitor.current_state = new_state;
     bb_monitor.last_state_change = time(NULL);
 }
+
+// Globals
+static int current_mode = MODE_STANDALONE;
+static int sock_fd = -1; // Network socket
 // ----------------------------------------
 
 // Timers for periodic events (Obstacle movement)
@@ -60,8 +65,8 @@ static struct timespec last_obst_change = {0, 0};
 static char last_status[256] = "";
 
 // Dynamic Game Entities
-static float current_x = 1.0f;
-static float current_y = 1.0f;
+static float current_x = 1.0f, current_y = 1.0f; // Drone Locale
+static float remote_x = -1.0f, remote_y = -1.0f; // Drone Remoto
 static Point *obstacles = NULL;
 static int num_obstacles = 0;
 static Point *targets = NULL;
@@ -70,6 +75,61 @@ static int num_targets = 0;
 // System handles
 static WINDOW *status_win = NULL;
 static pid_t watchdog_pid = -1;
+
+/* ======================================================================================
+ * SECTION: COORDINATE CONVERSION & PROTOCOL
+ * ====================================================================================== */
+
+// Convert Ncurses (0,0 Top-Left) -> Virtual (0,0 Bottom-Left)
+void coords_local_to_virt(float lx, float ly, int win_h, float *vx, float *vy) {
+    *vx = lx;
+    *vy = (float)win_h - ly;
+}
+
+// Convert Virtual (0,0 Bottom-Left) -> Ncurses (0,0 Top-Left)
+void coords_virt_to_local(float vx, float vy, int win_h, float *lx, float *ly) {
+    *lx = vx;
+    *ly = (float)win_h - vy;
+}
+
+// Send Message with ACK waiting
+void net_send_pos(int fd, float x, float y, int win_h) {
+    if (fd < 0) return;
+    
+    float vx, vy;
+    coords_local_to_virt(x, y, win_h, &vx, &vy); // Convert to virtual
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%.2f %.2f", vx, vy);
+    
+    // Write
+    if (write(fd, buf, strlen(buf)) < 0) return;
+
+    // Wait ACK (Blocking for simplicity as per requirements)
+    char ack[2];
+    read(fd, ack, 1); 
+}
+
+// Receive Message and send ACK
+int net_recv_pos(int fd, float *rx, float *ry, int win_h) {
+    if (fd < 0) return 0;
+    
+    char buf[64];
+    memset(buf, 0, sizeof(buf));
+    
+    ssize_t n = read(fd, buf, sizeof(buf)-1);
+    if (n <= 0) return 0; // Disconnected or error
+    
+    // Send ACK immediately
+    write(fd, ACK_MSG, ACK_LEN);
+
+    float vx, vy;
+    if (sscanf(buf, "%f %f", &vx, &vy) == 2) {
+        coords_virt_to_local(vx, vy, win_h, rx, ry); // Convert back to local
+        return 1;
+    }
+    return 0;
+}
 
 /* ======================================================================================
  * SECTION 1: CONNESSIONE AL SERVER
@@ -156,6 +216,48 @@ int connect_to_client(const char *host, int port) {
         close(sockfd);
         sleep(1);  // Retry lento per dare tempo al client di mettersi in ascolto
     }
+}
+
+/* ======================================================================================
+ * SECTION: NETWORK SETUP
+ * ====================================================================================== */
+int init_server() {
+    int s_fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
+    int opt = 1;
+    setsockopt(s_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(NET_PORT);
+
+    bind(s_fd, (struct sockaddr*)&addr, sizeof(addr));
+    listen(s_fd, 1);
+    
+    logMessage(LOG_PATH_SC, "[SERVER] Waiting for client...");
+    mvprintw(LINES/2, COLS/2 - 10, "WAITING FOR CLIENT..."); refresh();
+    
+    int c_fd = accept(s_fd, NULL, NULL);
+    logMessage(LOG_PATH_SC, "[SERVER] Client connected.");
+    return c_fd;
+}
+
+int init_client() {
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
+    struct hostent *server = gethostbyname("localhost");
+
+    addr.sin_family = AF_INET;
+    memcpy(&addr.sin_addr.s_addr, server->h_addr, server->h_length);
+    addr.sin_port = htons(NET_PORT);
+
+    logMessage(LOG_PATH_SC, "[CLIENT] Connecting...");
+    while (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        mvprintw(LINES/2, COLS/2 - 10, "CONNECTING..."); refresh();
+        sleep(1);
+    }
+    logMessage(LOG_PATH_SC, "[CLIENT] Connected.");
+    return fd;
 }
 
 
@@ -280,6 +382,13 @@ void draw_drone(WINDOW *win, float x, float y) {
     mvwprintw(win, iy, ix, "+");
     wattroff(win, COLOR_PAIR(1));
 
+    // Draw Remote Entity (If Active)
+    if (remote_x >= 0 && remote_y >= 0) {
+        wattron(win, COLOR_PAIR(2)); // Red
+        mvwprintw(win, (int)remote_y, (int)remote_x, current_mode == MODE_SERVER ? "C" : "S");
+        wattroff(win, COLOR_PAIR(2));
+    }
+
     wnoutrefresh(win);
     wnoutrefresh(status_win);
     doupdate();
@@ -289,8 +398,11 @@ void draw_drone(WINDOW *win, float x, float y) {
 void redraw_scene(WINDOW *win) {
     set_state(STATE_RENDERING); // Update State
     draw_background(win);
-    draw_obstacles(win);
-    draw_targets(win);
+    if(current_mode == MODE_STANDALONE){
+
+        draw_obstacles(win);
+        draw_targets(win);
+    }
     draw_drone(win, current_x, current_y);
 
     wnoutrefresh(win);
@@ -409,7 +521,7 @@ ssize_t recv_msg(int fd, char *buf, size_t bufsz) {
     return n;
 }
 
-void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ, int server_fd) {
+void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ) {
     set_state(STATE_BROADCASTING); // Update State
     Message msg;
     int max_y, max_x;
@@ -421,12 +533,6 @@ void send_window_size(WINDOW *win, int fd_drone, int fd_obst, int fd_targ, int s
     write(fd_drone, &msg, sizeof(msg));
     write(fd_obst,  &msg, sizeof(msg));
     write(fd_targ,  &msg, sizeof(msg));
-
-    char msg_server[64];
-    snprintf(msg_server, sizeof(msg_server), "size %d %d\n", max_x, max_y);
-    write(server_fd, msg_server, strlen(msg_server));
-    
-    logMessage(LOG_PATH, "[BB] SEND WINDOW %s", msg_server);
 }
 
 void send_resize(WINDOW *win, int fd_drone) {
@@ -446,7 +552,7 @@ void send_resize(WINDOW *win, int fd_drone) {
 
 int main(int argc, char *argv[]) {
     // A. Parse Arguments (Pipe File Descriptors)
-    if (argc < 9) {
+    if (argc < 10) {
         fprintf(stderr, "[BB] Error: Needed 7 file descriptors, received %d\n", argc-1);
         return 1;
     }
@@ -459,20 +565,7 @@ int main(int argc, char *argv[]) {
     int fd_targ_write  = atoi(argv[6]);
     int fd_targ_read   = atoi(argv[7]);
     int fd_wd_write    = atoi(argv[8]);
-
-    int server_fd = connect_to_server("localhost", 5000);
-    logMessage(LOG_PATH_SC, "[BB] Connected to server");
-
-    int client_fd = connect_to_client("localhost", 5001); // attenzione alla porta
-    send_msg(client_fd, "BB\n"); // dici al client chi sei
-    logMessage(LOG_PATH_SC, "[BB] Sent identity to client");
-
-
-    send_msg(server_fd, "BB\n");
-    logMessage(LOG_PATH_SC, "[BB] Sent identity to server");
-
-
-    signal(SIGPIPE, SIG_IGN); 
+    current_mode = atoi(argv[9]);
 
     // B. Setup Watchdog Signal Handler
     struct sigaction sa;
@@ -481,12 +574,17 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGUSR1, &sa, NULL);
 
-    // C. Watchdog Synchronization and PID Publishing (Secure)
-    wait_for_watchdog_pid();
+    // Setup WD Signal (Solo in MODE_STANDALONE)
+    if (current_mode == MODE_STANDALONE) {
+        signal(SIGUSR1, watchdog_ping_handler);
+        wait_for_watchdog_pid();
+    }
 
+    // Pubblicazione PID
     FILE *fp_pid = fopen(PID_FILE_PATH, "a");
     if (!fp_pid) {
-        logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
+        // Se fallisce qui, assicurati che la cartella /tmp o logs esista, ma qui non usiamo logMessage per evitare ricorsioni se il log fallisce
+        perror("[BB] Error opening PID file");
         exit(1);
     }
 
@@ -510,12 +608,35 @@ int main(int argc, char *argv[]) {
     init_pair(3, COLOR_GREEN, -1);
     refresh();
 
+    // --- NETWORK HANDSHAKE ---
+    WINDOW *win = NULL;
+    int win_h = LINES - 1, win_w = COLS;
+
+    if (current_mode == MODE_SERVER) {
+        sock_fd = init_server();
+        // Send Dimensions
+        char dim[64];
+        snprintf(dim, sizeof(dim), "%d %d", win_w, win_h);
+        write(sock_fd, dim, strlen(dim));
+        char ack[2]; read(sock_fd, ack, 1); // Wait ACK
+    } 
+    else if (current_mode == MODE_CLIENT) {
+        sock_fd = init_client();
+        // Recv Dimensions
+        char dim[64];
+        read(sock_fd, dim, sizeof(dim));
+        sscanf(dim, "%d %d", &win_w, &win_h);
+        write(sock_fd, ACK_MSG, ACK_LEN); // Send ACK
+        resizeterm(win_h + 1, win_w); // Resize local terminal
+    }
+
+
     // E. Initial Window Creation & IPC
     status_win = newwin(1, COLS, 0, 0);
-    WINDOW *win = create_window(LINES - 1, COLS, 1, 0);
+    win = create_window(LINES - 1, COLS, 1, 0);
     
     reposition_and_redraw(&win);
-    send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write, server_fd);
+    send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
 
 
     // Variables for multiplexing and logic
@@ -572,24 +693,25 @@ int main(int argc, char *argv[]) {
         FD_ZERO(&readfds);
         FD_SET(fd_input_read, &readfds);
         FD_SET(fd_drone_read, &readfds);
-        FD_SET(fd_obst_read, &readfds);
-        FD_SET(fd_targ_read, &readfds); 
-        FD_SET(server_fd, &readfds); 
-        FD_SET(client_fd, &readfds); 
-
+        if(current_mode == MODE_STANDALONE){
+            FD_SET(fd_obst_read, &readfds);
+            FD_SET(fd_targ_read, &readfds); 
+        }
         
-        int maxfd = fd_input_read;
-        if (fd_drone_read > maxfd) maxfd = fd_drone_read;
-        if (fd_obst_read > maxfd) maxfd = fd_obst_read;
-        if (fd_targ_read > maxfd) maxfd = fd_targ_read;
-        if (server_fd > maxfd) maxfd = server_fd;
-        if (client_fd > maxfd) maxfd = client_fd;
-        maxfd += 1;
+        int max_fd = fd_input_read;
+        if (fd_drone_read > max_fd) max_fd = fd_drone_read;
+        if (fd_obst_read > max_fd) max_fd = fd_obst_read;
+        if (fd_targ_read > max_fd) max_fd = fd_targ_read;
+        if (sock_fd > max_fd) max_fd = sock_fd;
+        max_fd += 1;
+
+        //int max_fd = (sock_fd > fd_drone_read) ? sock_fd : fd_drone_read;
+        //if (fd_input_read > max_fd) max_fd = fd_input_read;
 
         tv.tv_sec  = 0;
         tv.tv_usec = 50000; // 50ms Timeout
 
-        int ret = select(maxfd, &readfds, NULL, NULL, &tv);
+        int ret = select(max_fd, &readfds, NULL, NULL, &tv);
         if (ret < 0) {
             if (errno == EINTR) continue;
             break;
@@ -622,6 +744,11 @@ int main(int argc, char *argv[]) {
 
                 case MSG_TYPE_POSITION:{
                     sscanf(msg.data, "%f %f", &current_x, &current_y);
+
+                    if (sock_fd >= 0) {
+                        net_send_pos(sock_fd, current_x, current_y, win_h);
+                    }
+
                     redraw_scene(win); // Sets STATE_RENDERING
                     
                     // Collision Logic: Drone vs Targets
@@ -669,6 +796,27 @@ int main(int argc, char *argv[]) {
             }
         }
 
+        // 3. NETWORK RECEPTION
+        if (sock_fd >= 0 && FD_ISSET(sock_fd, &readfds)) {
+            float rx, ry;
+            if (net_recv_pos(sock_fd, &rx, &ry, win_h)) {
+                remote_x = rx; remote_y = ry;
+                
+                // IF SERVER: Remote drone is an OBSTACLE for local drone
+                if (current_mode == MODE_SERVER) {
+                     Point p; p.x = (int)remote_x; p.y = (int)remote_y;
+                     Message obst_msg; 
+                     obst_msg.type = MSG_TYPE_OBSTACLES;
+                     snprintf(obst_msg.data, sizeof(obst_msg.data), "1"); // 1 Obstacle
+                     write(fd_drone_write, &obst_msg, sizeof(obst_msg));
+                     write(fd_drone_write, &p, sizeof(Point));
+                }
+            } else {
+                // Connection closed
+                break; 
+            }
+        }
+
         // 6. Handle Obstacle Process Data
         if (FD_ISSET(fd_obst_read, &readfds)) {
             set_state(STATE_UPDATING_MAP);
@@ -683,11 +831,11 @@ int main(int argc, char *argv[]) {
                     
                     logMessage(LOG_PATH, "[BB] received %d obstacles", num_obstacles);
                     
-                    // Distribute obstacles to Drone & Target
+                       // Distribute obstacles to Drone & Target
                     set_state(STATE_BROADCASTING);
                     Message out_msg;
                     out_msg.type = MSG_TYPE_OBSTACLES;
-                    snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
+                    snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);      
                     
                     write(fd_drone_write, &out_msg, sizeof(out_msg));
                     write(fd_drone_write, obstacles, sizeof(Point) * num_obstacles);
@@ -726,42 +874,9 @@ int main(int argc, char *argv[]) {
                 redraw_scene(win);
             }
         }
-
-        if (FD_ISSET(server_fd, &readfds)) {
-            char buf[BUFSZ];
-            recv_msg(server_fd, buf, sizeof(buf));
-
-            if (strncmp(buf, "drone", 5) == 0) {
-                char drone_msg[64];
-                snprintf(drone_msg, sizeof(drone_msg), "%d %d\n", (int)current_x, (int)current_y);
-                send_msg(server_fd, drone_msg);
-                logMessage(LOG_PATH_SC, "[BB] Drone position sent to server: %s", drone_msg);
-            }
-        }
-
-        if (FD_ISSET(client_fd, &readfds)) {
-            char buf[BUFSZ];
-            recv_msg(client_fd, buf, sizeof(buf));
-            
-            if (strncmp(buf, "send_obst", 9) == 0) {
-                // Costruisci stringa ostacoli
-                char obst_msg[BUFSZ];
-                int offset = 0;
-                for (int i = 0; i < num_obstacles; i++) {
-                    offset += snprintf(obst_msg + offset, sizeof(obst_msg) - offset,
-                                    "%d %d;", obstacles[i].x, obstacles[i].y);
-                }
-                strncat(obst_msg, "\n", sizeof(obst_msg) - strlen(obst_msg) - 1);
-                
-                send_msg(client_fd, obst_msg);
-                logMessage(LOG_PATH_SC, "[BB] Obstacles sent to client: %s", obst_msg);
-            }
-        }
-
     }
 
-    close(server_fd);
-    logMessage(LOG_PATH, "[BB] close serverfd");
+    if (sock_fd >= 0) close(sock_fd);
 
 
     /* --- SUB-SECTION: CLEANUP --- */

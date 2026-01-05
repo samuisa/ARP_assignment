@@ -99,10 +99,11 @@ void send_forces(Message msg, int fd_out, float drone_Fx, float drone_Fy,
  * SECTION 3: MAIN EXECUTION & PHYSICS ENGINE
  * ====================================================================================== */
 int main(int argc, char *argv[]) {
-    if (argc < 3) return 1;
+    if (argc < 4) return 1;
 
     int fd_in   = atoi(argv[1]);
     int fd_out  = atoi(argv[2]);
+    int mode    = atoi(argv[3]);
 
     signal(SIGPIPE, SIG_IGN); 
     fcntl(fd_in, F_SETFL, O_NONBLOCK);
@@ -114,26 +115,29 @@ int main(int argc, char *argv[]) {
 
     //logMessage(LOG_PATH, "[DRONE] Process started");
 
-    struct sigaction sa;
-    sa.sa_handler = watchdog_ping_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
-    sigaction(SIGUSR1, &sa, NULL);
+    if(mode == MODE_STANDALONE){
 
-    // --- WATCHDOG SYNCHRONIZATION ---
-    wait_for_watchdog_pid();
+        struct sigaction sa;
+        sa.sa_handler = watchdog_ping_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART;
+        sigaction(SIGUSR1, &sa, NULL);
 
-    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
-    if (!fp_pid) {
-        //logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
-        exit(1);
+        // --- WATCHDOG SYNCHRONIZATION ---
+        wait_for_watchdog_pid();
+
+        FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+        if (!fp_pid) {
+            //logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
+            exit(1);
+        }
+        int fd_pid = fileno(fp_pid);
+        flock(fd_pid, LOCK_EX); 
+        publish_my_pid(fp_pid);
+        fflush(fp_pid);
+        flock(fd_pid, LOCK_UN);
+        fclose(fp_pid);
     }
-    int fd_pid = fileno(fp_pid);
-    flock(fd_pid, LOCK_EX); 
-    publish_my_pid(fp_pid);
-    fflush(fp_pid);
-    flock(fd_pid, LOCK_UN);
-    fclose(fp_pid);
 
     // --- MAIN LOOP ---
     while (1) {

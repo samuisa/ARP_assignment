@@ -9,7 +9,7 @@ LOGDIR = logs
 
 COMMON_OBJS = $(OBJDIR)/log.o
 
-TARGETS = main drone obstacle blackboard input target watchdog server client
+TARGETS = main drone obstacle blackboard input target watchdog
 
 all: setup $(TARGETS)
 
@@ -44,14 +44,6 @@ input: $(OBJDIR)/input.o $(COMMON_OBJS)
 	$(CC) $^ -o $(BINDIR)/$@ -lncurses
 
 watchdog: $(OBJDIR)/watchdog.o $(COMMON_OBJS)
-	@mkdir -p $(BINDIR)
-	$(CC) $^ -o $(BINDIR)/$@
-
-server: $(OBJDIR)/server.o $(COMMON_OBJS)
-	@mkdir -p $(BINDIR)
-	$(CC) $^ -o $(BINDIR)/$@
-
-client: $(OBJDIR)/client.o $(COMMON_OBJS)
 	@mkdir -p $(BINDIR)
 	$(CC) $^ -o $(BINDIR)/$@
 

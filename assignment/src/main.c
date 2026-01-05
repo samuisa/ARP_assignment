@@ -39,6 +39,22 @@ int main(void) {
     ensureLogsDir();
     logMessage(LOG_PATH, "[MAIN] PROGRAM STARTED");
 
+    // --- 1. SELEZIONE MODALITA' ---
+    int mode = MODE_STANDALONE;
+    printf("======================================\n");
+    printf(" SELECT MODE:\n");
+    printf(" 0: MODE_STANDALONE (Local)\n");
+    printf(" 1: Server\n");
+    printf(" 2: Client\n");
+    printf("======================================\n");
+    printf("> ");
+    if (scanf("%d", &mode) != 1) mode = 0;
+
+    logMessage(LOG_PATH, "[MAIN] Starting in MODE: %d", mode);
+
+    char arg_mode[4];
+    snprintf(arg_mode, sizeof(arg_mode), "%d", mode);
+
     /* --- SUB-SECTION: PIPE CREATION --- */
     /* Establishing communication channels between processes */
 
@@ -77,23 +93,6 @@ int main(void) {
 
     /* --- SUB-SECTION: FORKING PROCESSES --- */
 
-
-    pid_t pid_server = fork();
-
-    if (pid_server == 0) {
-        execl("./exec/server", "server", NULL);
-        perror("exec server");
-        exit(1);
-    }
-
-    pid_t pid_client = fork();
-
-    if (pid_client == 0) {
-        execl("./exec/client", "client", NULL);
-        perror("exec client");
-        exit(1);
-    }
-
     /* 1. INPUT PROCESS (Runs in Konsole) */
     pid_t pid_input = fork();
     if (pid_input == 0) {
@@ -110,56 +109,12 @@ int main(void) {
         char fd_out[16];
         snprintf(fd_out, sizeof(fd_out), "%d", pipe_input_blackboard[1]);
 
-        execlp("konsole", "konsole", "-e", "./exec/input", fd_out, NULL);
+        execlp("konsole", "konsole", "-e", "./exec/input", fd_out, arg_mode, NULL);
         perror("exec input");
         exit(1);
     }
 
-    /* 2. OBSTACLE PROCESS */
-    pid_t pid_obst = fork();
-    if (pid_obst == 0) {
-        close(pipe_blackboard_obstacle[1]); 
-        close(pipe_obstacle_blackboard[0]); 
-
-        close(pipe_input_blackboard[0]); close(pipe_input_blackboard[1]);
-        close(pipe_blackboard_drone[0]); close(pipe_blackboard_drone[1]);
-        close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
-        close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
-        close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
-        close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
-
-        char fd_in[16], fd_out[16];
-        snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_obstacle[0]);
-        snprintf(fd_out, sizeof(fd_out), "%d", pipe_obstacle_blackboard[1]);
-
-        execlp("./exec/obstacle", "./exec/obstacle", fd_in, fd_out, NULL);
-        perror("exec obstacle");
-        exit(1);
-    }
-
-    /* 3. TARGET PROCESS */
-    pid_t pid_target = fork();
-    if (pid_target == 0) {
-        close(pipe_blackboard_target[1]); 
-        close(pipe_target_blackboard[0]); 
-
-        close(pipe_input_blackboard[0]); close(pipe_input_blackboard[1]);
-        close(pipe_blackboard_drone[0]); close(pipe_blackboard_drone[1]);
-        close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
-        close(pipe_blackboard_obstacle[0]); close(pipe_blackboard_obstacle[1]);
-        close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
-        close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
-
-        char fd_in[16], fd_out[16];
-        snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_target[0]);
-        snprintf(fd_out, sizeof(fd_out), "%d", pipe_target_blackboard[1]);
-
-        execlp("./exec/target", "./exec/target", fd_in, fd_out, NULL);
-        perror("exec target");
-        exit(1);
-    }
-
-    /* 4. BLACKBOARD PROCESS (Runs in Konsole) */
+        /* 4. BLACKBOARD PROCESS (Runs in Konsole) */
     pid_t pid_blackboard = fork();
     if (pid_blackboard == 0) {
         close(pipe_input_blackboard[1]);
@@ -189,7 +144,8 @@ int main(void) {
                fd_in_input, fd_in_drone,
                fd_out_drone, fd_out_obst,
                fd_in_obst, fd_out_target,
-               fd_in_target, fd_out_wd, NULL);
+               fd_in_target, fd_out_wd,
+               arg_mode, NULL);
 
         perror("exec blackboard");
         exit(1);
@@ -212,33 +168,82 @@ int main(void) {
         snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_drone[0]);
         snprintf(fd_out, sizeof(fd_out), "%d", pipe_drone_blackboard[1]);
 
-        execlp("./exec/drone", "./exec/drone", fd_in, fd_out, NULL);
+        execlp("./exec/drone", "./exec/drone", fd_in, fd_out, arg_mode, NULL);
         perror("exec drone");
         exit(1);
     }
 
-    /* 6. WATCHDOG PROCESS (Runs in Konsole) */
-    pid_t pid_watchdog = fork();
-    if (pid_watchdog == 0) {
-        // Close all application pipes except the one reading from BB (if used)
-        close(pipe_input_blackboard[0]); close(pipe_input_blackboard[1]);
-        close(pipe_blackboard_drone[0]); close(pipe_blackboard_drone[1]);
-        close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
-        close(pipe_blackboard_obstacle[0]); close(pipe_blackboard_obstacle[1]);
-        close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
-        close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
-        close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
-        close(pipe_blackboard_watchdog[1]);
+    pid_t pid_obst = -1, pid_target = -1, pid_watchdog = -1;
 
-        char fd_in_bb[16];
-        snprintf(fd_in_bb, sizeof(fd_in_bb), "%d", pipe_blackboard_watchdog[0]);
+    if (mode == MODE_STANDALONE){
 
-        execlp("konsole", "konsole", "-e", "./exec/watchdog", fd_in_bb, NULL);
-        perror("exec watchdog");
-        exit(1);
+        /* 2. OBSTACLE PROCESS */
+        pid_obst = fork();
+        if (pid_obst == 0) {
+            close(pipe_blackboard_obstacle[1]); 
+            close(pipe_obstacle_blackboard[0]); 
+
+            close(pipe_input_blackboard[0]); close(pipe_input_blackboard[1]);
+            close(pipe_blackboard_drone[0]); close(pipe_blackboard_drone[1]);
+            close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
+            close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
+            close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+            close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
+
+            char fd_in[16], fd_out[16];
+            snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_obstacle[0]);
+            snprintf(fd_out, sizeof(fd_out), "%d", pipe_obstacle_blackboard[1]);
+
+            execlp("./exec/obstacle", "./exec/obstacle", fd_in, fd_out, NULL);
+            perror("exec obstacle");
+            exit(1);
+        }
+
+        /* 3. TARGET PROCESS */
+        pid_target = fork();
+        if (pid_target == 0) {
+            close(pipe_blackboard_target[1]); 
+            close(pipe_target_blackboard[0]); 
+
+            close(pipe_input_blackboard[0]); close(pipe_input_blackboard[1]);
+            close(pipe_blackboard_drone[0]); close(pipe_blackboard_drone[1]);
+            close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
+            close(pipe_blackboard_obstacle[0]); close(pipe_blackboard_obstacle[1]);
+            close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
+            close(pipe_blackboard_watchdog[0]); close(pipe_blackboard_watchdog[1]);
+
+            char fd_in[16], fd_out[16];
+            snprintf(fd_in,  sizeof(fd_in),  "%d", pipe_blackboard_target[0]);
+            snprintf(fd_out, sizeof(fd_out), "%d", pipe_target_blackboard[1]);
+
+            execlp("./exec/target", "./exec/target", fd_in, fd_out, NULL);
+            perror("exec target");
+            exit(1);
+        }
+
+        /* 6. WATCHDOG PROCESS (Runs in Konsole) */
+        pid_watchdog = fork();
+        if (pid_watchdog == 0) {
+            // Close all application pipes except the one reading from BB (if used)
+            close(pipe_input_blackboard[0]); close(pipe_input_blackboard[1]);
+            close(pipe_blackboard_drone[0]); close(pipe_blackboard_drone[1]);
+            close(pipe_drone_blackboard[0]); close(pipe_drone_blackboard[1]);
+            close(pipe_blackboard_obstacle[0]); close(pipe_blackboard_obstacle[1]);
+            close(pipe_obstacle_blackboard[0]); close(pipe_obstacle_blackboard[1]);
+            close(pipe_blackboard_target[0]); close(pipe_blackboard_target[1]);
+            close(pipe_target_blackboard[0]); close(pipe_target_blackboard[1]);
+            close(pipe_blackboard_watchdog[1]);
+
+            char fd_in_bb[16];
+            snprintf(fd_in_bb, sizeof(fd_in_bb), "%d", pipe_blackboard_watchdog[0]);
+
+            execlp("konsole", "konsole", "-e", "./exec/watchdog", fd_in_bb, NULL);
+            perror("exec watchdog");
+            exit(1);
+        }
+
+        logMessage(LOG_PATH, "[MAIN] Watchdog started (pid=%d)", pid_watchdog);
     }
-
-    logMessage(LOG_PATH, "[MAIN] Watchdog started (pid=%d)", pid_watchdog);
 
     /* --- SUB-SECTION: PARENT CLEANUP AND WAIT --- */
     

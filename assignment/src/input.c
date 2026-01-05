@@ -94,30 +94,33 @@ void watchdog_ping_handler(int signo) {
  * SECTION 4: MAIN EXECUTION (INPUT CAPTURE)
  * ====================================================================================== */
 int main(int argc, char *argv[]) {
-    if(argc < 2) return 1;
+    if(argc < 3) return 1;
 
     int fd_out = atoi(argv[1]);
+    int mode = atoi(argv[2]);
 
-    struct sigaction sa;
-    sa.sa_handler = watchdog_ping_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
-    sigaction(SIGUSR1, &sa, NULL);
+    if(mode == MODE_STANDALONE){
+        struct sigaction sa;
+        sa.sa_handler = watchdog_ping_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART;
+        sigaction(SIGUSR1, &sa, NULL);
 
-    wait_for_watchdog_pid();
+        wait_for_watchdog_pid();
 
-    FILE *fp_pid = fopen(PID_FILE_PATH, "a");
-    if (!fp_pid) {
-        logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
-        exit(1);
+        FILE *fp_pid = fopen(PID_FILE_PATH, "a");
+        if (!fp_pid) {
+            logMessage(LOG_PATH, "[DRONE] Error opening PID file!");
+            exit(1);
+        }
+
+        int fd_pid = fileno(fp_pid);
+        flock(fd_pid, LOCK_EX); 
+        publish_my_pid(fp_pid);
+        fflush(fp_pid);
+        flock(fd_pid, LOCK_UN);
+        fclose(fp_pid);
     }
-
-    int fd_pid = fileno(fp_pid);
-    flock(fd_pid, LOCK_EX); 
-    publish_my_pid(fp_pid);
-    fflush(fp_pid);
-    flock(fd_pid, LOCK_UN);
-    fclose(fp_pid);
     
     int ch;
     char msg_buf[2];

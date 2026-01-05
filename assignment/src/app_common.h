@@ -12,6 +12,15 @@
 #define MSG_TYPE_FORCE       9
 #define MSG_TYPE_PID         10
 
+#define MODE_STANDALONE 0
+#define MODE_SERVER     1
+#define MODE_CLIENT     2
+
+// NEW: Protocol
+#define NET_PORT 5000
+#define ACK_MSG "A"
+#define ACK_LEN 1
+
 #define PERC_OBST            0.005
 #define PERC_TARG            0.001
 
