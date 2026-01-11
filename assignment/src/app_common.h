@@ -37,6 +37,10 @@
 #define rho 8.0f
 #define eta 5.0f
 
+#define IP_LEN 64
+extern char server_address[IP_LEN];
+extern int port_number;
+
 // ----- MODEL STRUCTURES -----
 typedef struct {
     int type;

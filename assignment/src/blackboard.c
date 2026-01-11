@@ -71,10 +71,28 @@ static Point *obstacles = NULL;
 static int num_obstacles = 0;
 static Point *targets = NULL;
 static int num_targets = 0;
+static int target_reached = 0;
 
 // System handles
 static WINDOW *status_win = NULL;
 static pid_t watchdog_pid = -1;
+
+
+static const char *state_to_str(BBProcessState s) {
+    switch (s) {
+        case STATE_INIT: return "INIT";
+        case STATE_IDLE: return "IDLE";
+        case STATE_PROCESSING_INPUT: return "PROCESSING_INPUT";
+        case STATE_UPDATING_MAP: return "UPDATING_MAP";
+        case STATE_RENDERING: return "RENDERING";
+        case STATE_BROADCASTING: return "BROADCASTING";
+        default: return "UNKNOWN";
+    }
+}
+
+#define BB_LOG_STATE(msg) \
+    logMessage(LOG_PATH, "[BB][%s] %s", state_to_str(bb_monitor.current_state), msg)
+
 
 /* ======================================================================================
  * SECTION: COORDINATE CONVERSION & PROTOCOL
@@ -132,93 +150,6 @@ int net_recv_pos(int fd, float *rx, float *ry, int win_h) {
 }
 
 /* ======================================================================================
- * SECTION 1: CONNESSIONE AL SERVER
- * ====================================================================================== */
-
-int connect_to_server(const char *host, int port) {
-    int sockfd;
-    struct sockaddr_in serv_addr;
-    struct hostent *server;
-
-    while (1) {
-        sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd < 0) {
-            perror("[BB] socket");
-            sleep(1);
-            continue;
-        }
-
-        server = gethostbyname(host);
-        if (!server) {
-            logMessage(LOG_PATH_SC, "[BB] host not found, retrying...");
-            printf("host not found, retrying...");
-            close(sockfd);
-            sleep(1);
-            continue;
-        }
-
-        bzero(&serv_addr, sizeof(serv_addr));
-        serv_addr.sin_family = AF_INET;
-        memcpy(&serv_addr.sin_addr.s_addr,
-               server->h_addr,
-               server->h_length);
-        serv_addr.sin_port = htons(port);
-
-        if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) == 0) {
-            logMessage(LOG_PATH_SC, "[BB->SERVER] CONNECTED to server");
-            return sockfd;
-        }
-
-        logMessage(LOG_PATH_SC, "[BB->SERVER] connect failed (errno=%d), retrying...", errno);
-        close(sockfd);
-        sleep(1);
-    }
-}
-
-int connect_to_client(const char *host, int port) {
-    int sockfd;
-    struct sockaddr_in cli_addr;
-    struct hostent *server;
-
-    while (1) {
-        // 1. Creazione socket
-        sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd < 0) {
-            perror("[BB->CLIENT] socket");
-            sleep(1);
-            continue;
-        }
-
-        // 2. Risoluzione hostname
-        server = gethostbyname(host);
-        if (!server) {
-            logMessage(LOG_PATH_SC, "[BB->CLIENT] host '%s' not found, retrying in 1s...", host);
-            close(sockfd);
-            sleep(1);
-            continue;
-        }
-
-        // 3. Setup indirizzo client
-        bzero(&cli_addr, sizeof(cli_addr));
-        cli_addr.sin_family = AF_INET;
-        memcpy(&cli_addr.sin_addr.s_addr, server->h_addr, server->h_length);
-        cli_addr.sin_port = htons(port);
-
-        // 4. Tentativo di connessione
-        if (connect(sockfd, (struct sockaddr *)&cli_addr, sizeof(cli_addr)) == 0) {
-            logMessage(LOG_PATH_SC, "[BB->CLIENT] Connected to client %s:%d", host, port);
-            return sockfd;
-        }
-
-        // 5. Connessione fallita: chiudo e riprovo
-        logMessage(LOG_PATH_SC, "[BB->CLIENT] connect to %s:%d failed (errno=%d, %s), retrying in 1s...",
-                   host, port, errno, strerror(errno));
-        close(sockfd);
-        sleep(1);  // Retry lento per dare tempo al client di mettersi in ascolto
-    }
-}
-
-/* ======================================================================================
  * SECTION: NETWORK SETUP
  * ====================================================================================== */
 int init_server() {
@@ -229,7 +160,7 @@ int init_server() {
     
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(NET_PORT);
+    addr.sin_port = htons(port_number);
 
     bind(s_fd, (struct sockaddr*)&addr, sizeof(addr));
     listen(s_fd, 1);
@@ -245,17 +176,25 @@ int init_server() {
 int init_client() {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     struct sockaddr_in addr;
-    struct hostent *server = gethostbyname("localhost");
 
     addr.sin_family = AF_INET;
-    memcpy(&addr.sin_addr.s_addr, server->h_addr, server->h_length);
-    addr.sin_port = htons(NET_PORT);
+    addr.sin_port = htons(port_number);
 
-    logMessage(LOG_PATH_SC, "[CLIENT] Connecting...");
+    // Usa IP inserito dall'utente
+    if (inet_pton(AF_INET, server_address, &addr.sin_addr) <= 0) {
+        logMessage(LOG_PATH_SC, "[CLIENT] Invalid IP address: %s", server_address);
+        return -1;
+    }
+
+    logMessage(LOG_PATH_SC, "[CLIENT] Connecting to %s:%d ...",
+               server_address, port_number);
+
     while (connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        mvprintw(LINES/2, COLS/2 - 10, "CONNECTING..."); refresh();
+        mvprintw(LINES/2, COLS/2 - 15, "CONNECTING TO %s...", server_address);
+        refresh();
         sleep(1);
     }
+
     logMessage(LOG_PATH_SC, "[CLIENT] Connected.");
     return fd;
 }
@@ -359,7 +298,7 @@ void draw_targets(WINDOW *win) {
         int ty = targets[i].y;
         if (tx > 0 && tx < max_x - 1 && ty > 0 && ty < max_y - 1) {
             wattron(win, COLOR_PAIR(3));
-            mvwprintw(win, ty, tx, "T");
+            mvwprintw(win, ty, tx, "%d", i + target_reached);
             wattroff(win, COLOR_PAIR(3));
         }
     }
@@ -441,6 +380,37 @@ void generate_new_obstacle(int idx, int width, int height) {
             valid = 0;
         }
     } while (!valid);
+}
+
+void generate_new_target(int idx, int width, int height) {
+    int valid;
+    do {
+        valid = 1;
+        targets[idx].x = rand() % (width - 2) + 1;
+        targets[idx].y = rand() % (height - 2) + 1;
+
+        // 1. Controllo sovrapposizione con Ostacoli
+        for (int i = 0; i < num_obstacles; i++) {
+            // Nota: Corretto anche qui per confrontare target vs ostacolo
+            if (targets[idx].x == obstacles[i].x && targets[idx].y == obstacles[i].y) {
+                valid = 0; break;
+            }
+        }
+
+        // 2. Controllo sovrapposizione con ALTRI Target (FIX QUI)
+        if (valid) {
+            for (int k = 0; k < num_targets; k++) {
+                // IMPORTANTE: k != idx assicura che non controlli se stesso
+                if (k != idx && targets[k].x == targets[idx].x && targets[k].y == targets[idx].y) {
+                    valid = 0; 
+                    break;
+                }
+            }
+        }
+        
+    } while (!valid);
+
+    logMessage(LOG_PATH, "[BB] New target %d position: %d %d", idx, targets[idx].x, targets[idx].y);
 }
 
 /* ======================================================================================
@@ -545,6 +515,58 @@ void send_resize(WINDOW *win, int fd_drone) {
     write(fd_drone, &msg, sizeof(msg));
 }
 
+// --- PROTOCOL HELPER FUNCTIONS ---
+
+void send_str(int fd, const char *str) {
+    // Inviamo buffer a dimensione fissa per semplicità e robustezza nel protocollo "string messages"
+    char buf[64]; 
+    memset(buf, 0, sizeof(buf));
+    strncpy(buf, str, sizeof(buf)-1);
+    if (write(fd, buf, sizeof(buf)) < 0) perror("Net write error");
+}
+
+int recv_str(int fd, char *buf) {
+    memset(buf, 0, 64);
+    // Leggiamo la dimensione fissa concordata
+    if (read(fd, buf, 64) <= 0) return 0; // Connection closed or error
+    return 1;
+}
+
+// Implementazione Handshake Iniziale (Client e Server)
+void run_network_handshake(int mode, int fd, int *w, int *h) {
+    char buf[64];
+    char dim_str[64];
+
+    if (mode == MODE_SERVER) {
+        // --- SERVER SIDE ---
+        // 1. Send OK, Recv OOK
+        send_str(fd, "ok");
+        recv_str(fd, buf); 
+        if (strcmp(buf, "ook") != 0) logMessage(LOG_PATH, "[NET] Handshake Error: expected ook");
+
+        // 2. Send Size, Recv SOK
+        snprintf(dim_str, sizeof(dim_str), "%d %d", *w, *h);
+        send_str(fd, dim_str);
+        recv_str(fd, buf); // Expect "sok <size>"
+        // (Opzionale: parsing di buf per verificare che contenga "sok")
+        
+    } else {
+        // --- CLIENT SIDE ---
+        // 1. Recv OK, Send OOK
+        recv_str(fd, buf);
+        if (strcmp(buf, "ok") != 0) logMessage(LOG_PATH, "[NET] Handshake Error: expected ok");
+        send_str(fd, "ook");
+
+        // 2. Recv Size, Send SOK
+        recv_str(fd, dim_str);
+        sscanf(dim_str, "%d %d", w, h);
+        
+        char reply[128];
+        snprintf(reply, sizeof(reply), "sok %s", dim_str);
+        send_str(fd, reply);
+    }
+}
+
 /* ======================================================================================
  * SECTION 8: MAIN EXECUTION
  * Setup, Watchdog Synchronization, I/O Multiplexing Loop.
@@ -552,7 +574,7 @@ void send_resize(WINDOW *win, int fd_drone) {
 
 int main(int argc, char *argv[]) {
     // A. Parse Arguments (Pipe File Descriptors)
-    if (argc < 10) {
+    if (argc < 12) {
         fprintf(stderr, "[BB] Error: Needed 7 file descriptors, received %d\n", argc-1);
         return 1;
     }
@@ -566,6 +588,11 @@ int main(int argc, char *argv[]) {
     int fd_targ_read   = atoi(argv[7]);
     int fd_wd_write    = atoi(argv[8]);
     current_mode = atoi(argv[9]);
+    if (argv[10]) {
+        strncpy(server_address, argv[10], sizeof(server_address) - 1);
+        server_address[sizeof(server_address) - 1] = '\0'; // Ensure null-termination
+    }
+    port_number = atoi(argv[11]);
 
     // B. Setup Watchdog Signal Handler
     struct sigaction sa;
@@ -588,6 +615,8 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
+    logMessage(LOG_PATH, "ip address: %s, port number: %d", server_address, port_number);
+
     int fd_pid = fileno(fp_pid);
     flock(fd_pid, LOCK_EX); // Acquire Lock
     publish_my_pid(fp_pid);
@@ -608,28 +637,25 @@ int main(int argc, char *argv[]) {
     init_pair(3, COLOR_GREEN, -1);
     refresh();
 
-    // --- NETWORK HANDSHAKE ---
+    // --- NETWORK HANDSHAKE (PROTOCOL V2) ---
     WINDOW *win = NULL;
     int win_h = LINES - 1, win_w = COLS;
-
+    
+    // Inizializzazione Socket
     if (current_mode == MODE_SERVER) {
-        sock_fd = init_server();
-        // Send Dimensions
-        char dim[64];
-        snprintf(dim, sizeof(dim), "%d %d", win_w, win_h);
-        write(sock_fd, dim, strlen(dim));
-        char ack[2]; read(sock_fd, ack, 1); // Wait ACK
-    } 
-    else if (current_mode == MODE_CLIENT) {
-        sock_fd = init_client();
-        // Recv Dimensions
-        char dim[64];
-        read(sock_fd, dim, sizeof(dim));
-        sscanf(dim, "%d %d", &win_w, &win_h);
-        write(sock_fd, ACK_MSG, ACK_LEN); // Send ACK
-        resizeterm(win_h + 1, win_w); // Resize local terminal
+        sock_fd = init_server(); // Assumiamo ritorni un socket valido o esca
+    } else if (current_mode == MODE_CLIENT) {
+        sock_fd = init_client(); // Assumiamo ritorni un socket valido o esca
     }
 
+    if (sock_fd >= 0) {
+        // Esegue il protocollo: ok/ook -> size/sok
+        run_network_handshake(current_mode, sock_fd, &win_w, &win_h);
+        
+        if (current_mode == MODE_CLIENT) {
+            resizeterm(win_h + 1, win_w);
+        }
+    }
 
     // E. Initial Window Creation & IPC
     status_win = newwin(1, COLS, 0, 0);
@@ -702,7 +728,6 @@ int main(int argc, char *argv[]) {
         if (fd_drone_read > max_fd) max_fd = fd_drone_read;
         if (fd_obst_read > max_fd) max_fd = fd_obst_read;
         if (fd_targ_read > max_fd) max_fd = fd_targ_read;
-        if (sock_fd > max_fd) max_fd = sock_fd;
         max_fd += 1;
 
         //int max_fd = (sock_fd > fd_drone_read) ? sock_fd : fd_drone_read;
@@ -758,20 +783,43 @@ int main(int argc, char *argv[]) {
                     for (int i = 0; i < num_targets; i++) {
                         if (dx == (int)targets[i].x && dy == (int)targets[i].y) {
                             // Remove target
-                            for (int j = i; j < num_targets - 1; j++) targets[j] = targets[j + 1];
-                            num_targets--;
+                            if(i == 0){
+                                logMessage(LOG_PATH, "[BB] Expected target reached");
+                                for (int j = i; j < num_targets - 1; j++) targets[j] = targets[j + 1];
+                                target_reached++;
+                                num_targets--;
+                                
+                                // Notify Drone
+                                set_state(STATE_BROADCASTING);
+                                Message out_msg;
+                                out_msg.type = MSG_TYPE_TARGETS;
+                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
+                                write(fd_drone_write, &out_msg, sizeof(out_msg));
+                                write(fd_drone_write, targets, sizeof(Point) * num_targets);
+                            }
+                            else if(i != 0){
+
+                                logMessage(LOG_PATH, "[BB] Not expected target reached");
+                                targets[i].x = 0;
+                                targets[i].y = 0;
+
+                                int max_y, max_x;
+                                getmaxyx(win, max_y, max_x);
+                                generate_new_target(i, max_x, max_y);
+
+                                set_state(STATE_BROADCASTING);
+                                Message out_msg;
+                                out_msg.type = MSG_TYPE_TARGETS;
+                                snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
+                                write(fd_drone_write, &out_msg, sizeof(out_msg));
+                                write(fd_drone_write, targets, sizeof(Point) * num_targets);
+                            }
                             
-                            // Notify Drone
-                            set_state(STATE_BROADCASTING);
-                            Message out_msg;
-                            out_msg.type = MSG_TYPE_TARGETS;
-                            snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_targets);
-                            write(fd_drone_write, &out_msg, sizeof(out_msg));
-                            write(fd_drone_write, targets, sizeof(Point) * num_targets);
 
                             // Win Condition: Trigger Respawn
                             if (num_targets == 0) {
                                 logMessage(LOG_PATH, "[BB] ALL TARGETS CLEARED");
+                                Message out_msg;
                                 out_msg.type = MSG_TYPE_OBSTACLES;
                                 snprintf(out_msg.data, sizeof(out_msg.data), "%d", num_obstacles);
                                 write(fd_targ_write, &out_msg, sizeof(out_msg));
@@ -793,27 +841,6 @@ int main(int argc, char *argv[]) {
                 }
                     default: break;
                 }
-            }
-        }
-
-        // 3. NETWORK RECEPTION
-        if (sock_fd >= 0 && FD_ISSET(sock_fd, &readfds)) {
-            float rx, ry;
-            if (net_recv_pos(sock_fd, &rx, &ry, win_h)) {
-                remote_x = rx; remote_y = ry;
-                
-                // IF SERVER: Remote drone is an OBSTACLE for local drone
-                if (current_mode == MODE_SERVER) {
-                     Point p; p.x = (int)remote_x; p.y = (int)remote_y;
-                     Message obst_msg; 
-                     obst_msg.type = MSG_TYPE_OBSTACLES;
-                     snprintf(obst_msg.data, sizeof(obst_msg.data), "1"); // 1 Obstacle
-                     write(fd_drone_write, &obst_msg, sizeof(obst_msg));
-                     write(fd_drone_write, &p, sizeof(Point));
-                }
-            } else {
-                // Connection closed
-                break; 
             }
         }
 
@@ -873,6 +900,79 @@ int main(int argc, char *argv[]) {
                 }
                 redraw_scene(win);
             }
+        }
+
+        // ============================================================
+        // SERVER LOGIC (ACTIVE): Invia dati periodicamente
+        // ============================================================
+        if (current_mode == MODE_SERVER && sock_fd >= 0) {
+            // Nota: Per non bloccare tutto troppo spesso, potresti volerlo fare 
+            // solo quando i dati cambiano o con un timer, ma qui seguiamo il protocollo sequenziale.
+            
+            char buf[64];
+            char pos_str[64];
+
+            // 1. SEND DRONE
+            send_str(sock_fd, "drone");         // cmd: drone
+            
+            snprintf(pos_str, sizeof(pos_str), "%.2f %.2f", current_x, current_y);
+            send_str(sock_fd, pos_str);         // data: x y
+            
+            recv_str(sock_fd, buf);             // ack: dok <drone> (Wait blocking)
+            
+            // 2. SEND OBSTACLE (Request remote pos)
+            send_str(sock_fd, "obst");          // cmd: obst
+            
+            recv_str(sock_fd, pos_str);         // data: x y (from client)
+            sscanf(pos_str, "%f %f", &remote_x, &remote_y); // Update remote representation
+            
+            send_str(sock_fd, "pok");           // ack: pok <obstacle>
+            
+            // Aggiorna l'ostacolo remoto per la fisica del Server
+            // (Il server vede il drone client come un ostacolo)
+             /* Point p; p.x = (int)remote_x; p.y = (int)remote_y; ... logica ostacolo ... */
+        }
+
+        // ============================================================
+        // CLIENT LOGIC (REACTIVE): Risponde ai comandi del Server
+        // ============================================================
+        if (current_mode == MODE_CLIENT && sock_fd >= 0 && FD_ISSET(sock_fd, &readfds)) {
+            char cmd[64];
+            char buf[64];
+            
+            // 1. RCV COMMAND (x)
+            if (recv_str(sock_fd, cmd) == 0) {
+                // Connection closed
+                close(sock_fd); sock_fd = -1;
+                break; 
+            }
+
+            // 2. SWITCH X
+            if (strcmp(cmd, "q") == 0) {
+                send_str(sock_fd, "qok");
+                break; // Exit loop
+            }
+            else if (strcmp(cmd, "drone") == 0) {
+                // RCV X, Y
+                recv_str(sock_fd, buf);
+                sscanf(buf, "%f %f", &remote_x, &remote_y); // Update remote drone pos
+                
+                // SND DOK <DRONE>
+                char ack[64];
+                snprintf(ack, sizeof(ack), "dok %.2f %.2f", remote_x, remote_y);
+                send_str(sock_fd, ack);
+            }
+            else if (strcmp(cmd, "obst") == 0) {
+                // SND X, Y (Invio la mia posizione come ostacolo per il server)
+                char my_pos[64];
+                snprintf(my_pos, sizeof(my_pos), "%.2f %.2f", current_x, current_y);
+                send_str(sock_fd, my_pos);
+                
+                // RCV POK <OBSTACLE>
+                recv_str(sock_fd, buf);
+            }
+            
+            redraw_scene(win); // Aggiorna grafica dopo scambio rete
         }
     }
 

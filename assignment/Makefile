@@ -7,7 +7,7 @@ OBJDIR = obj
 BINDIR = exec
 LOGDIR = logs
 
-COMMON_OBJS = $(OBJDIR)/log.o
+COMMON_OBJS = $(OBJDIR)/log.o $(OBJDIR)/app_common.o
 
 TARGETS = main drone obstacle blackboard input target watchdog
 

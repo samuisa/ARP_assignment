@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -40,6 +41,8 @@ int main(void) {
     logMessage(LOG_PATH, "[MAIN] PROGRAM STARTED");
 
     // --- 1. SELEZIONE MODALITA' ---
+    memset(server_address, 0, sizeof(server_address));
+    port_number = 0;
     int mode = MODE_STANDALONE;
     printf("======================================\n");
     printf(" SELECT MODE:\n");
@@ -51,6 +54,23 @@ int main(void) {
     if (scanf("%d", &mode) != 1) mode = 0;
 
     logMessage(LOG_PATH, "[MAIN] Starting in MODE: %d", mode);
+
+    if (mode == MODE_CLIENT) {
+        printf("======================================\n");
+        printf(" INSERT THE IP ADDRESS:\n");
+        printf("======================================\n");
+        printf("> ");
+        scanf("%63s", server_address);  // limite di sicurezza
+    }
+
+
+    if(mode == MODE_SERVER || mode == MODE_CLIENT){
+        printf("======================================\n");
+        printf(" INSERT PORT NUMBER:\n");
+        printf("======================================\n");
+        printf("> ");
+        scanf("%d", &port_number);
+    }
 
     char arg_mode[4];
     snprintf(arg_mode, sizeof(arg_mode), "%d", mode);
@@ -129,6 +149,7 @@ int main(void) {
         char fd_in_input[16], fd_in_drone[16];
         char fd_out_drone[16], fd_out_obst[16];
         char fd_in_obst[16], fd_out_target[16], fd_in_target[16], fd_out_wd[16];
+        char arg_port[16];
 
         snprintf(fd_in_input,  sizeof(fd_in_input),  "%d", pipe_input_blackboard[0]);
         snprintf(fd_in_drone,  sizeof(fd_in_drone),  "%d", pipe_drone_blackboard[0]);
@@ -138,6 +159,8 @@ int main(void) {
         snprintf(fd_out_target,sizeof(fd_out_target),"%d", pipe_blackboard_target[1]);
         snprintf(fd_in_target, sizeof(fd_in_target), "%d", pipe_target_blackboard[0]);
         snprintf(fd_out_wd, sizeof(fd_out_wd), "%d", pipe_blackboard_watchdog[1]);
+        snprintf(arg_port, sizeof(arg_port), "%d", port_number);
+        if (strlen(server_address) == 0) strcpy(server_address, "0.0.0.0");
 
         execlp("konsole", "konsole", "-e",
                "./exec/blackboard",
@@ -145,7 +168,7 @@ int main(void) {
                fd_out_drone, fd_out_obst,
                fd_in_obst, fd_out_target,
                fd_in_target, fd_out_wd,
-               arg_mode, NULL);
+               arg_mode, server_address, arg_port, NULL);
 
         perror("exec blackboard");
         exit(1);

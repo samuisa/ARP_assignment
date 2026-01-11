@@ -1,25 +1,2 @@
-[2026-01-05 12:17:56] (PID 14358) [MAIN] PROGRAM STARTED
-[2026-01-05 12:17:58] (PID 14358) [MAIN] Starting in MODE: 0
-[2026-01-05 12:17:58] (PID 14358) [MAIN] Application pipes created successfully
-[2026-01-05 12:17:58] (PID 14358) [MAIN] Watchdog started (pid=14365)
-[2026-01-05 12:17:58] (PID 14358) [MAIN] All processes running (input=14360 drone=14362 bb=14361 obst=14363 targ=14364)
-[2026-01-05 12:17:58] (PID 14363) [OBST] Started
-[2026-01-05 12:17:58] (PID 14363) [OBST] Waiting for Watchdog...
-[2026-01-05 12:17:58] (PID 14364) [TARG] Started with PID: 14364
-[2026-01-05 12:17:58] (PID 14364) [TARG] Waiting for Watchdog...
-[2026-01-05 12:17:58] (PID 14416) [INPUT] Waiting for Watchdog...
-[2026-01-05 12:17:58] (PID 14416) [INPUT] Watchdog found (PID 14414)
-[2026-01-05 12:17:58] (PID 14416) [INPUT] PID published securely
-[2026-01-05 12:17:58] (PID 14417) [BB] Waiting for Watchdog...
-[2026-01-05 12:17:58] (PID 14417) [BB] Watchdog found (PID 14414)
-[2026-01-05 12:17:58] (PID 14417) [BB] PID published securely
-[2026-01-05 12:17:58] (PID 14416) [CTRL] Main started, fd_out=4
-[2026-01-05 12:17:58] (PID 14417) [BB] Resized: 99x24
-[2026-01-05 12:17:58] (PID 14417) [BB] Ready and GUI started
-[2026-01-05 12:17:58] (PID 14363) [OBST] Watchdog found (PID 14414)
-[2026-01-05 12:17:58] (PID 14363) [OBST] PID published securely
-[2026-01-05 12:17:58] (PID 14363) [OBST] Generated 11 obstacles
-[2026-01-05 12:17:58] (PID 14364) [TARG] Watchdog found (PID 14414)
-[2026-01-05 12:17:58] (PID 14364) [TARG] PID published securely
-[2026-01-05 12:17:58] (PID 14417) [BB] received 11 obstacles
-[2026-01-05 12:17:58] (PID 14364) [TARG] Generated 2 targets
+[2026-01-11 12:17:41] (PID 13986) [MAIN] PROGRAM STARTED
+[2026-01-11 12:17:45] (PID 13986) [MAIN] Starting in MODE: 1
