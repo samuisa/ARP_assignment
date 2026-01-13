@@ -28,6 +28,7 @@
 #include "log.h"
 
 #define BUFSZ 256
+#define M_PI 3.14159265358979323846
 
 // --- STATE MONITORING STRUCTS (ADDED) ---
 typedef enum {
@@ -62,6 +63,7 @@ typedef struct {
 
 // Global Monitor Instance
 static BBMonitor bb_monitor = {STATE_INIT, 0};
+static float alpha = 0.0f;
 
 // Helper to update state
 void set_state(BBProcessState new_state) {
@@ -72,9 +74,7 @@ void set_state(BBProcessState new_state) {
 // Globals
 static int current_mode = MODE_STANDALONE;
 static int net_fd = -1; // Descrittore socket (sia per client che server dopo accept)
-// --- MODIFICA: VARIABILI DISTINTE PER SERVER E CLIENT ---
-static int server_sock_fd = -1; // Socket usato se siamo in modalità SERVER
-static int client_sock_fd = -1; // Socket usato se siamo in modalità CLIENT
+
 // ----------------------------------------
 
 // Timers for periodic events (Obstacle movement)
@@ -96,19 +96,6 @@ static int target_reached = 0;
 // System handles
 static WINDOW *status_win = NULL;
 static pid_t watchdog_pid = -1;
-
-
-static const char *state_to_str(BBProcessState s) {
-    switch (s) {
-        case STATE_INIT: return "INIT";
-        case STATE_IDLE: return "IDLE";
-        case STATE_PROCESSING_INPUT: return "PROCESSING_INPUT";
-        case STATE_UPDATING_MAP: return "UPDATING_MAP";
-        case STATE_RENDERING: return "RENDERING";
-        case STATE_BROADCASTING: return "BROADCASTING";
-        default: return "UNKNOWN";
-    }
-}
 
 #define BB_LOG_STATE(msg) \
     logMessage(LOG_PATH, "[BB][%s] %s", state_to_str(bb_monitor.current_state), msg)
@@ -197,8 +184,52 @@ int recv_line_block(int fd, char *buffer, int size) {
     return 1;
 }
 
-void local_to_virt(float lx, float ly, int h, float *vx, float *vy) { *vx = lx; *vy = (float)h - ly; }
-void virt_to_local(float vx, float vy, int h, float *lx, float *ly) { *lx = vx; *ly = (float)h - vy; }
+/* ======================================================================================
+ * CORREZIONE: NESSUNA INVERSIONE DELL'ASSE Y
+ * ====================================================================================== */
+
+void local_to_virt(float lx, float ly, float *vx, float *vy) { 
+    // Input: lx, ly (Locali Ncurses: 0,0 in alto a sx)
+    float x = lx;
+    float y = ly; 
+    
+    // Applica rotazione SOLO se necessaria (se alpha != 0)
+    if(alpha != 0.0f) {
+        float cos_a = cosf(alpha);
+        float sin_a = sinf(alpha);
+        
+        float temp_x = x * cos_a - y * sin_a;
+        float temp_y = x * sin_a + y * cos_a;
+        
+        x = temp_x;
+        y = temp_y;
+    }
+    
+    *vx = x;
+    *vy = y;
+}
+
+void virt_to_local(float vx, float vy, float *lx, float *ly) { 
+    // Input: vx, vy (Virtuali)
+    float x = vx;
+    float y = vy;
+    
+    // Applica rotazione inversa SOLO se necessaria
+    if(alpha != 0.0f) {
+        float cos_a = cosf(-alpha);
+        float sin_a = sinf(-alpha);
+        
+        float temp_x = x * cos_a - y * sin_a;
+        float temp_y = x * sin_a + y * cos_a;
+        
+        x = temp_x;
+        y = temp_y;
+    }
+    
+    *lx = x;
+    *ly = y;
+}
+
 /* ======================================================================================
  * SECTION 3: CONNECTION & HANDSHAKE
  * ====================================================================================== */
@@ -229,30 +260,80 @@ void protocol_handshake(int mode, int fd, int *w, int *h, WINDOW** win) {
     char buf[256];
     
     if (mode == MODE_SERVER) {
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][SERVER] Starting handshake. Sending 'ok'...");
         send_msg(fd, "ok");
-        if (!recv_line_block(fd, buf, 256) || strcmp(buf, "ook") != 0) exit(1);
+
+        // Attesa risposta "ook"
+        if (!recv_line_block(fd, buf, 256)) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][SERVER][ERROR] Client disconnected or read error.");
+            exit(1);
+        }
+        // MODIFICA: Controllo stringa secca, senza spazi o dati extra
+        if (strcmp(buf, "ook") != 0) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][SERVER][ERROR] Invalid response: expected 'ook', got '%s'", buf);
+            exit(1);
+        }
         
-        // Il server invia le PROPRIE dimensioni correnti
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][SERVER] Received 'ook'. Sending map size: %d x %d", *w, *h);
+
+        // Il server invia le PROPRIE dimensioni
         send_msg(fd, "size %d %d", *w, *h);
         
-        if (!recv_line_block(fd, buf, 256)) exit(1);
-        int rw, rh; 
-        sscanf(buf, "sok %d %d", &rw, &rh);
+        // Attesa conferma dimensioni "sok"
+        if (!recv_line_block(fd, buf, 256)) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][SERVER][ERROR] Failed to receive size ack.");
+            exit(1);
+        }
+
+        // MODIFICA: Rimosso sscanf di rw/rh. Ci aspettiamo SOLO "sok"
+        int cw, ch;
+        if (sscanf(buf, "sok %d %d", &cw, &ch) == 2) {
+            logMessage(LOG_PATH_SC,
+                "[HANDSHAKE][SERVER] Client confirmed size: %d x %d",
+                cw, ch);
+        } else {
+            logMessage(LOG_PATH_SC,
+                "[HANDSHAKE][SERVER][ERROR] Malformed sok: '%s'", buf);
+            exit(1);
+        }
     
     } else { // CLIENT
-        if (!recv_line_block(fd, buf, 256) || strcmp(buf, "ok") != 0) exit(1);
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT] Waiting for server 'ok'...");
+
+        if (!recv_line_block(fd, buf, 256)) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT][ERROR] Server disconnected or read error.");
+            exit(1);
+        }
+        if (strcmp(buf, "ok") != 0) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT][ERROR] Invalid handshake init: expected 'ok', got '%s'", buf);
+            exit(1);
+        }
         
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT] Received 'ok'. Sending response 'ook'...");
+        // MODIFICA: Invio ack pulito
         send_msg(fd, "ook");
-        if (!recv_line_block(fd, buf, 256)) exit(1);
+
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT] Waiting for map size...");
+        if (!recv_line_block(fd, buf, 256)) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT][ERROR] Failed to receive map size.");
+            exit(1);
+        }
         
         // 1. Riceve dimensioni dal Server
-        sscanf(buf, "size %d %d", w, h);
+        if (sscanf(buf, "size %d %d", w, h) != 2) {
+            logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT][ERROR] Malformed size packet: '%s'", buf);
+            exit(1);
+        }
         
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT] Received map size: %d x %d. Sending confirmation...", *w, *h);
+
         // 2. Conferma ricezione
+        // MODIFICA: Invio SOLO "sok", senza parametri (risolve anche il bug dei puntatori w,h nella send_msg)
         send_msg(fd, "sok %d %d", *w, *h);
         
         // 3. APPLICA LE DIMENSIONI IMMEDIATAMENTE
-        // Passiamo 'win' (che è già WINDOW**) e le dimensioni ricevute w e h
+        logMessage(LOG_PATH_SC, "[HANDSHAKE][CLIENT] Applying window resize and finishing handshake.");
+        
         reposition_and_redraw(win, *h, *w);
     }
 }
@@ -913,90 +994,143 @@ int main(int argc, char *argv[]) {
 
         if (current_mode != MODE_STANDALONE && net_fd >= 0) {
             
-            // --- LOGICA SERVER ---
+            // --- SERVER LOGIC ---
             if (current_mode == MODE_SERVER) {
                 switch (net_state) {
                     case SV_SEND_DRONE:
-                        // Inviare è veloce, lo facciamo subito
-                        local_to_virt(current_x, current_y, win_h, &vx, &vy);
-                        send_msg(net_fd, "drone");
-                        send_msg(net_fd, "%.2f %.2f", vx, vy);
+                        // 1. Invio coordinate drone
+                        // NOTA: Rimossa win_h dalla chiamata (non richiesta dalla firma della funzione)
+                        local_to_virt(current_x, current_y, &vx, &vy);
+                        
+                        // Invio header e dati
+                        send_msg(net_fd, "drone"); 
+                        send_msg(net_fd, "%f %f", vx, vy);
+                        
+                        // Transizione immediata all'attesa dell'ACK
                         net_state = SV_WAIT_DOK;
                         break;
 
                     case SV_WAIT_DOK:
-                        // Controlliamo se è arrivata risposta
+                        // 2. Attesa ACK "dok"
                         if (recv_line_nonblock(net_fd, net_buf, sizeof(net_buf)) == 1) {
-                            if (strncmp(net_buf, "dok", 3) == 0) {
+                            
+                            // Controllo rigoroso per "dok"
+                            float dx, dy;
+                            if (sscanf(net_buf, "dok %f %f", &dx, &dy) == 2) {
+                                logMessage(LOG_PATH_SC, "[SERVER] dok ricevuto (%f %f)", dx, dy);
                                 net_state = SV_SEND_REQ_OBST;
-                            } else if (strncmp(net_buf, "q", 1) == 0) goto exit_loop;
+                            }
+                            // Gestione uscita
+                            else if (strcmp(net_buf, "q") == 0) {
+                                logMessage(LOG_PATH_SC, "[SERVER] Segnale di uscita ricevuto.");
+                                goto exit_loop;
+                            }
                         }
-                        // Se recv ritorna 0, non facciamo nulla e riproviamo al prossimo frame
                         break;
 
                     case SV_SEND_REQ_OBST:
+                        // 3. Invio richiesta ostacoli
                         send_msg(net_fd, "obst");
                         net_state = SV_WAIT_OBST_DATA;
                         break;
 
                     case SV_WAIT_OBST_DATA:
+                        // 4. Attesa dati ostacolo e invio ACK finale "pok"
                         if (recv_line_nonblock(net_fd, net_buf, sizeof(net_buf)) == 1) {
                             if (sscanf(net_buf, "%f %f", &rx, &ry) == 2) {
-                                virt_to_local(rx, ry, win_h, &remote_x, &remote_y);
-                                num_obstacles = 1; obstacles[0].x=remote_x; obstacles[0].y=remote_y;
                                 
-                                // Aggiorna fisica
-                                msg.type = MSG_TYPE_OBSTACLES; sprintf(msg.data, "1");
+                                // Aggiornamento logica locale con dati ricevuti
+                                virt_to_local(rx, ry, &remote_x, &remote_y);
+                                num_obstacles = 1; 
+                                obstacles[0].x = (int)remote_x; 
+                                obstacles[0].y = (int)remote_y;
+                                
+                                // Notifica ai processi interni (UI/Fisica)
+                                msg.type = MSG_TYPE_OBSTACLES; 
+                                sprintf(msg.data, "1");
                                 write(fd_drone_write, &msg, sizeof(msg));
                                 write(fd_drone_write, obstacles, sizeof(Point));
                                 redraw_scene(win);
 
-                                send_msg(net_fd, "pok %.2f %.2f", rx, ry);
-                                net_state = SV_SEND_DRONE; // Loop ricomincia
-                            }
+                                // *** PUNTO CHIAVE RICHIESTO ***
+                                // Invio SOLO "pok" e resetto il ciclo immediatamente
+                                logMessage(LOG_PATH_SC, "[SERVER] Dati ricevuti. Invio 'pok'.");
+                                send_msg(net_fd, "pok %f %f", rx, ry);
+                                
+                                net_state = SV_SEND_DRONE; // Ricomincia il ciclo da capo
+                            } 
                         }
                         break;
                     default: break;
                 }
             } 
             
-            // --- LOGICA CLIENT ---
+            // --- CLIENT LOGIC ---
             else if (current_mode == MODE_CLIENT) {
                 switch (net_state) {
                     case CL_WAIT_COMMAND:
+                        // 1. Attesa comandi dal server ("drone", "obst", "q")
                         if (recv_line_nonblock(net_fd, net_buf, sizeof(net_buf)) == 1) {
-                            if (strcmp(net_buf, "drone") == 0) net_state = CL_WAIT_DRONE_DATA;
-                            else if (strcmp(net_buf, "obst") == 0) net_state = CL_SEND_OBST_DATA;
-                            else if (strcmp(net_buf, "q") == 0) { send_msg(net_fd, "qok"); goto exit_loop; }
+                            
+                            if (strcmp(net_buf, "drone") == 0) {
+                                net_state = CL_WAIT_DRONE_DATA;
+                            }
+                            else if (strcmp(net_buf, "obst") == 0) {
+                                net_state = CL_SEND_OBST_DATA;
+                            }
+                            else if (strcmp(net_buf, "q") == 0) { 
+                                // Uscita pulita: Mando qok e chiudo, nient'altro.
+                                logMessage(LOG_PATH_SC, "[CLIENT] Quit ricevuto. Invio 'qok' ed esco.");
+                                send_msg(net_fd, "qok"); 
+                                goto exit_loop; 
+                            }
                         }
                         break;
 
                     case CL_WAIT_DRONE_DATA:
+                        // 2. Ricezione dati drone server -> Invio "dok"
                         if (recv_line_nonblock(net_fd, net_buf, sizeof(net_buf)) == 1) {
                             if (sscanf(net_buf, "%f %f", &rx, &ry) == 2) {
-                                virt_to_local(rx, ry, win_h, &remote_x, &remote_y);
-                                num_obstacles = 1; obstacles[0].x=remote_x; obstacles[0].y=remote_y;
                                 
-                                msg.type = MSG_TYPE_OBSTACLES; sprintf(msg.data, "1");
+                                // Aggiornamento locale
+                                virt_to_local(rx, ry, &remote_x, &remote_y);
+                                num_obstacles = 1; 
+                                obstacles[0].x = (int)remote_x; 
+                                obstacles[0].y = (int)remote_y;
+                                
+                                msg.type = MSG_TYPE_OBSTACLES; 
+                                sprintf(msg.data, "1");
                                 write(fd_drone_write, &msg, sizeof(msg));
                                 write(fd_drone_write, obstacles, sizeof(Point));
                                 redraw_scene(win);
 
-                                send_msg(net_fd, "dok %.2f %.2f", rx, ry);
+                                // *** PUNTO CHIAVE RICHIESTO ***
+                                // Invio SOLO "dok" e torno in attesa
+                                logMessage(LOG_PATH_SC, "[CLIENT] Dati drone ricevuti. Invio 'dok'.");
+                                send_msg(net_fd, "dok %f %f", rx, ry);
+                                
                                 net_state = CL_WAIT_COMMAND;
                             }
                         }
                         break;
 
                     case CL_SEND_OBST_DATA:
-                        local_to_virt(current_x, current_y, win_h, &vx, &vy);
-                        send_msg(net_fd, "%.2f %.2f", vx, vy);
+                        // 3. Invio propri dati (ostacolo per l'altro)
+                        local_to_virt(current_x, current_y, &vx, &vy);
+                        logMessage(LOG_PATH_SC, "[CLIENT] Invio posizione locale: %f, %f", vx, vy);
+                        
+                        send_msg(net_fd, "%f %f", vx, vy);
                         net_state = CL_WAIT_POK;
                         break;
 
                     case CL_WAIT_POK:
+                        // 4. Attesa conferma "pok"
                         if (recv_line_nonblock(net_fd, net_buf, sizeof(net_buf)) == 1) {
-                            net_state = CL_WAIT_COMMAND;
+                            float ox, oy;
+                            if (sscanf(net_buf, "pok %f %f", &ox, &oy) == 2) {
+                                logMessage(LOG_PATH_SC, "[CLIENT] pok ricevuto (%f %f)", ox, oy);
+                                net_state = CL_WAIT_COMMAND;
+                            }
                         }
                         break;
                     default: break;

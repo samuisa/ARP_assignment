@@ -33,7 +33,7 @@ obstacle: $(OBJDIR)/obstacle.o $(COMMON_OBJS)
 
 blackboard: $(OBJDIR)/blackboard.o $(COMMON_OBJS)
 	@mkdir -p $(BINDIR)
-	$(CC) $^ -o $(BINDIR)/$@ -lncursesw
+	$(CC) $^ -o $(BINDIR)/$@ -lncursesw $(LDLIBS)
 
 target: $(OBJDIR)/target.o $(COMMON_OBJS)
 	@mkdir -p $(BINDIR)

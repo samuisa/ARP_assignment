@@ -1,23 +1,2 @@
-[2026-01-12 18:33:27] (PID 37626) [MAIN] PROGRAM STARTED
-[2026-01-12 18:33:29] (PID 37626) [MAIN] Starting in MODE: 0
-[2026-01-12 18:33:29] (PID 37626) [MAIN] Application pipes created successfully
-[2026-01-12 18:33:29] (PID 37626) [MAIN] Watchdog started (pid=37632)
-[2026-01-12 18:33:29] (PID 37626) [MAIN] All processes running (input=37627 drone=37629 bb=37628 obst=37630 targ=37631)
-[2026-01-12 18:33:29] (PID 37630) [OBST] Started
-[2026-01-12 18:33:29] (PID 37631) [TARG] Started with PID: 37631
-[2026-01-12 18:33:29] (PID 37631) [TARG] Waiting for Watchdog...
-[2026-01-12 18:33:29] (PID 37630) [OBST] Waiting for Watchdog...
-[2026-01-12 18:33:29] (PID 37681) [BB] Waiting for Watchdog...
-[2026-01-12 18:33:29] (PID 37631) [TARG] Watchdog found (PID 37685)
-[2026-01-12 18:33:29] (PID 37630) [OBST] Watchdog found (PID 37685)
-[2026-01-12 18:33:29] (PID 37631) [TARG] PID published securely
-[2026-01-12 18:33:29] (PID 37630) [OBST] PID published securely
-[2026-01-12 18:33:29] (PID 37681) [BB] Watchdog found (PID 37685)
-[2026-01-12 18:33:29] (PID 37681) [BB] PID published securely
-[2026-01-12 18:33:29] (PID 37681) [BB] Window Resized to: 88x29
-[2026-01-12 18:33:29] (PID 37681) [BB] Ready and GUI started
-[2026-01-12 18:33:29] (PID 37630) [OBST] Generated 12 obstacles
-[2026-01-12 18:33:29] (PID 37681) [BB] received 12 obstacles
-[2026-01-12 18:33:29] (PID 37631) [TARG] Generated 2 targets
-[2026-01-12 18:33:36] (PID 37630) [OBST] Pipe closed, exiting.
-[2026-01-12 18:33:36] (PID 37631) [TARG] Pipe closed, exiting.
+[2026-01-13 16:20:53] (PID 15401) [MAIN] PROGRAM STARTED
+[2026-01-13 16:20:56] (PID 15401) [MAIN] Starting in MODE: 2
