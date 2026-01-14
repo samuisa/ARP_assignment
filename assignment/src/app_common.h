@@ -12,7 +12,8 @@
 #define MSG_TYPE_FORCE       9
 #define MSG_TYPE_PID         10
 
-#define MODE_STANDALONE 0
+#define MODE_STANDALONE 1
+#define MODE_NETWORKED  2
 #define MODE_SERVER     1
 #define MODE_CLIENT     2
 

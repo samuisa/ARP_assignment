@@ -9,7 +9,7 @@ LOGDIR = logs
 
 COMMON_OBJS = $(OBJDIR)/log.o $(OBJDIR)/app_common.o
 
-TARGETS = main drone obstacle blackboard input target watchdog
+TARGETS = main drone obstacle blackboard input target watchdog network
 
 all: setup $(TARGETS)
 
@@ -46,6 +46,11 @@ input: $(OBJDIR)/input.o $(COMMON_OBJS)
 watchdog: $(OBJDIR)/watchdog.o $(COMMON_OBJS)
 	@mkdir -p $(BINDIR)
 	$(CC) $^ -o $(BINDIR)/$@
+
+# --- AGGIUNTO: Regola per il network ---
+network: $(OBJDIR)/network.o $(COMMON_OBJS)
+	@mkdir -p $(BINDIR)
+	$(CC) $^ -o $(BINDIR)/$@ $(LDLIBS)
 
 # =================== UTILS ===================
 setup:

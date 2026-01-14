@@ -1,2 +1,16 @@
-[2026-01-13 16:20:53] (PID 15401) [MAIN] PROGRAM STARTED
-[2026-01-13 16:20:56] (PID 15401) [MAIN] Starting in MODE: 2
+[2026-01-14 18:57:05] (PID 21669) [MAIN] PROGRAM STARTED
+[2026-01-14 18:57:10] (PID 21593) [MAIN] Starting in MODE: 2
+[2026-01-14 18:57:10] (PID 21593) [MAIN] Pipes created successfully
+[2026-01-14 18:57:10] (PID 21593) [MAIN] All processes started (input=21672 drone=21674 bb=21673 obst=-1 targ=-1 watchdog=-1 network=21675)
+[2026-01-14 18:57:10] (PID 21708) [BB] FDs: input=3 drone=7 obst=10 target=14 wd=18 network=21
+[2026-01-14 18:57:10] (PID 21708) [BB] PID published securely
+[2026-01-14 18:57:10] (PID 21708) [BB] Window Resized to: 99x24
+[2026-01-14 18:57:10] (PID 21708) [BB] Ready and GUI started
+[2026-01-14 18:57:18] (PID 21669) [MAIN] Starting in MODE: 2
+[2026-01-14 18:57:18] (PID 21669) [MAIN] Pipes created successfully
+[2026-01-14 18:57:18] (PID 21669) [MAIN] All processes started (input=21713 drone=21715 bb=21714 obst=-1 targ=-1 watchdog=-1 network=21716)
+[2026-01-14 18:57:18] (PID 21748) [BB] FDs: input=3 drone=7 obst=10 target=14 wd=18 network=21
+[2026-01-14 18:57:18] (PID 21748) [BB] PID published securely
+[2026-01-14 18:57:18] (PID 21748) [BB] Window Resized to: 99x24
+[2026-01-14 18:57:18] (PID 21748) [BB] Window Resized to: 99x24
+[2026-01-14 18:57:18] (PID 21748) [BB] Ready and GUI started

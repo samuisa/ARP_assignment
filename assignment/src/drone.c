@@ -97,11 +97,12 @@ long get_time_diff_ns(struct timespec t1, struct timespec t2) {
 
 // --- MAIN ---
 int main(int argc, char *argv[]) {
-    if (argc < 4) return 1;
+    if (argc < 5) return 1;
 
     int fd_in   = atoi(argv[1]);
     int fd_out  = atoi(argv[2]);
     int mode    = atoi(argv[3]);
+    int role    = atoi(argv[4]);
 
     signal(SIGPIPE, SIG_IGN); 
     // Fondamentale: Pipe Non-Blocking per svuotarla velocemente
@@ -114,20 +115,30 @@ int main(int argc, char *argv[]) {
 
     // Watchdog Setup
     if(mode == MODE_STANDALONE){
-        struct sigaction sa;
-        sa.sa_handler = watchdog_ping_handler;
-        sigemptyset(&sa.sa_mask);
-        sa.sa_flags = SA_RESTART;
-        sigaction(SIGUSR1, &sa, NULL);
-        wait_for_watchdog_pid();
+        // 1. PRIMA PUBBLICA IL PID (Così il watchdog sa che esistiamo)
         FILE *fp_pid = fopen(PID_FILE_PATH, "a");
-        if (!fp_pid) exit(1);
+        if (!fp_pid) {
+            perror("fopen PID file");
+            exit(1);
+        }
         int fd_pid = fileno(fp_pid);
         flock(fd_pid, LOCK_EX); 
         publish_my_pid(fp_pid);
         fflush(fp_pid);
         flock(fd_pid, LOCK_UN);
         fclose(fp_pid);
+
+        // 2. POI SETUP SEGNALI
+        struct sigaction sa;
+        sa.sa_handler = watchdog_ping_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART;
+        sigaction(SIGUSR1, &sa, NULL);
+
+        // 3. INFINE ASPETTA IL PID DEL WATCHDOG
+        // Se il WD ci pinga mentre siamo qui, il handler ignorerà il segnale
+        // perché watchdog_pid è ancora -1. Al prossimo ciclo saremo pronti.
+        wait_for_watchdog_pid();
     }
 
     struct timespec last_render_time;
@@ -158,8 +169,8 @@ int main(int argc, char *argv[]) {
                     sscanf(msg.data, "%d %d", &win_width, &win_height);
                     if (!spawned) {
                         // Logica Spawn (come richiesto)
-                        if (mode == MODE_SERVER) { drn.x = 10.0f; drn.y = 10.0f; } 
-                        else if (mode == MODE_CLIENT) { drn.x = (float)win_width - 5.0f; drn.y = (float)win_height - 5.0f; } 
+                        if (role == MODE_SERVER) { drn.x = 3.0f; drn.y = 3.0f; } 
+                        else if (role == MODE_CLIENT) { drn.x = (float)win_width - 5.0f; drn.y = (float)win_height - 5.0f; } 
                         else { drn.x = win_width / 2.0f; drn.y = win_height / 2.0f; }
                         
                         drn.x_1 = drn.x_2 = drn.x;

@@ -73,36 +73,29 @@ int main(int argc, char *argv[]) {
     int mode = atoi(argv[2]);
 
     if(mode == MODE_STANDALONE){
-        struct sigaction sa;
-        sa.sa_handler = watchdog_ping_handler;
-        sigemptyset(&sa.sa_mask);
-        sa.sa_flags = SA_RESTART;
-        sigaction(SIGUSR1, &sa, NULL);
-        wait_for_watchdog_pid();
+        // 1. PUBBLICA IL PID SUBITO
         FILE *fp_pid = fopen(PID_FILE_PATH, "a");
-        if (!fp_pid) exit(1);
+        if (!fp_pid) {
+            perror("fopen PID file");
+            exit(1);
+        }
         int fd_pid = fileno(fp_pid);
         flock(fd_pid, LOCK_EX); 
         publish_my_pid(fp_pid);
         fflush(fp_pid);
         flock(fd_pid, LOCK_UN);
         fclose(fp_pid);
-    }
 
-    /*struct sigaction sa;
+        // 2. SETUP SEGNALI
+        struct sigaction sa;
         sa.sa_handler = watchdog_ping_handler;
         sigemptyset(&sa.sa_mask);
         sa.sa_flags = SA_RESTART;
         sigaction(SIGUSR1, &sa, NULL);
+
+        // 3. ASPETTA IL WATCHDOG
         wait_for_watchdog_pid();
-        FILE *fp_pid = fopen(PID_FILE_PATH, "a");
-        if (!fp_pid) exit(1);
-        int fd_pid = fileno(fp_pid);
-        flock(fd_pid, LOCK_EX); 
-        publish_my_pid(fp_pid);
-        fflush(fp_pid);
-        flock(fd_pid, LOCK_UN);
-        fclose(fp_pid);*/
+    }
     
     int ch;
     char msg_buf[2];
