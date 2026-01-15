@@ -51,6 +51,9 @@ int main(void) {
     int mode = MODE_STANDALONE;
     int role = 0;
 
+    printf("\n");
+    printf("=== DRONE CONTROL ===\n");
+    printf("\n");
     printf(" Select mode:\n 1: standalone\n 2: networked\n> ");
     if (scanf("%d", &mode) != 1) mode = MODE_STANDALONE;
 

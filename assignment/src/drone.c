@@ -167,17 +167,37 @@ int main(int argc, char *argv[]) {
             switch (msg.type) {
                 case MSG_TYPE_SIZE: {
                     sscanf(msg.data, "%d %d", &win_width, &win_height);
+
+                    // Se non siamo ancora spawnati, questo è il momento della nascita!
                     if (!spawned) {
-                        // Logica Spawn (come richiesto)
-                        if (role == MODE_SERVER) { drn.x = 3.0f; drn.y = 3.0f; } 
-                        else if (role == MODE_CLIENT) { drn.x = (float)win_width - 5.0f; drn.y = (float)win_height - 5.0f; } 
-                        else { drn.x = win_width / 2.0f; drn.y = win_height / 2.0f; }
                         
+                        // A. Posizionamento
+                        if (mode == MODE_STANDALONE) {
+                            drn.x = win_width / 2.0f;
+                            drn.y = win_height / 2.0f;
+                        } 
+                        else if (mode == MODE_NETWORKED) {
+                            if (role == MODE_SERVER) {
+                                drn.x = 5.0f; drn.y = 5.0f;
+                            } 
+                            else if (role == MODE_CLIENT) {
+                                // Il client spawna in basso a destra
+                                drn.x = (float)win_width - 5.0f;
+                                drn.y = (float)win_height - 5.0f;
+                            }
+                        }
+
+                        // B. RESET FISICA (Zero inerzia pregressa)
                         drn.x_1 = drn.x_2 = drn.x;
                         drn.y_1 = drn.y_2 = drn.y;
+                        drn.Fx = drn.Fy = 0.0f; // Reset forze input utente
+                        
+                        // C. Sblocca il drone
                         spawned = true;
-                        // Invio immediato al primo spawn
+                        
+                        // D. Invia posizione iniziale
                         send_position(msg, drn.x, drn.y, fd_out);
+                        logMessage(LOG_PATH, "[DRONE] Spawned at %.2f %.2f", drn.x, drn.y);
                     }
                     break;
                 }
@@ -215,6 +235,10 @@ int main(int argc, char *argv[]) {
                     if (targets) read(fd_in, targets, sizeof(Point)*count);
                     num_targets = count; 
                     break; 
+                }
+                case MSG_TYPE_EXIT: {
+                    logMessage(LOG_PATH, "[DRONE] Received EXIT signal. Shutting down.");
+                    goto quit; // Salta direttamente alla pulizia
                 }
             }
         } // End Input While

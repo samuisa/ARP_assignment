@@ -122,9 +122,13 @@ int main(int argc, char *argv[]) {
         mvprintw(14, 0, "Feedback: '%c'  ", ch);
         refresh();
 
-        if(ch == KEY_QUIT) break;
+        if(ch == KEY_QUIT){
+            goto quit;
+            break;
+        } 
     }
 
+    quit:
     endwin();
     close(fd_out);
     return 0;

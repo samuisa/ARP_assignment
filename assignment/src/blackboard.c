@@ -491,10 +491,14 @@ int main(int argc, char *argv[]) {
     win = create_window(LINES - 1, COLS, 1, 0);
     
     reposition_and_redraw(&win, 0, 0);
-    send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
+    if (current_mode == MODE_STANDALONE || (current_mode == MODE_NETWORKED && current_role == MODE_SERVER)) {
+        send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
+    }
+    // ----------------------
+
     if (current_mode == MODE_NETWORKED) {
         if (current_role == MODE_SERVER) {
-            // Server: invia subito le dimensioni
+            // Server: invia le dimensioni al client remoto
             send_window_size_network(win, fd_network_write);
         } else {
             // Client: riceve dimensioni dal server
@@ -503,7 +507,14 @@ int main(int argc, char *argv[]) {
             if (n > 0 && msg.type == MSG_TYPE_SIZE) {
                 int width, height;
                 if (sscanf(msg.data, "%d %d", &width, &height) == 2) {
+                    
+                    // 1. Ridimensiona la finestra locale per coincidere col server
                     reposition_and_redraw(&win, height, width);
+                    
+                    // 2. ORA (e solo ora) invia le dimensioni corrette al Drone
+                    send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
+                    
+                    logMessage(LOG_PATH, "[BB] Synced size with Server: %dx%d and forwarded to Drone", width, height);
                 }
             }
         }
@@ -603,7 +614,20 @@ int main(int argc, char *argv[]) {
             if (n > 0) {
                 buf[n] = '\0';
                 if (buf[0] == 'q'){
-                    write(fd_wd_write, buf, sizeof(buf));
+                    Message quit_msg;
+                    quit_msg.type = MSG_TYPE_EXIT;
+                    snprintf(msg.data, sizeof(quit_msg), "%s", buf);
+                    if(current_mode == MODE_STANDALONE){
+                        write(fd_wd_write, &quit_msg, sizeof(Message));
+                        write(fd_drone_write, &quit_msg, sizeof(Message));
+                        write(fd_obst_write, &quit_msg, sizeof(Message));
+                        write(fd_targ_write, &quit_msg, sizeof(Message));
+                    }
+                    else{
+                        write(fd_drone_write, &quit_msg, sizeof(Message));
+                        write(fd_network_write, &quit_msg, sizeof(Message));
+                    }
+                    goto quit;
                     break;
                 }
                 logMessage(LOG_PATH_SC, "[BB] Input received: %c", buf[0]);
@@ -618,15 +642,6 @@ int main(int argc, char *argv[]) {
         if(FD_ISSET(fd_network_read, &readfds)){
             if(read(fd_network_read, &msg, sizeof(Message)) > 0){
                 switch(msg.type){
-                    case MSG_TYPE_SIZE: {
-                        int width, height;
-                        if (sscanf(msg.data, "%d %d", &width, &height) == 2){
-                            reposition_and_redraw(&win, height, width);
-                            send_window_size(win, fd_drone_write, fd_obst_write, fd_targ_write);
-                        }
-                        break;
-                    }
-
                     case MSG_TYPE_DRONE: {
                         float remote_x, remote_y;
                         if (sscanf(msg.data, "%f %f", &remote_x, &remote_y) == 2) {
@@ -638,6 +653,21 @@ int main(int argc, char *argv[]) {
                             num_obstacles = 1;
                             obstacles[0].x = (int)remote_x;
                             obstacles[0].y = (int)remote_y;
+
+                            int max_y, max_x;
+                            getmaxyx(win, max_y, max_x);
+                            if(obstacles[0].x >= max_x){
+                                obstacles[0].x = max_x -1;
+                            }
+                            if(obstacles[0].y >= max_y-1){
+                                obstacles[0].y = max_y -2;
+                            }
+                            if(obstacles[0].x < 1){
+                                obstacles[0].x = 1;
+                            }
+                            if(obstacles[0].y < 1){
+                                obstacles[0].y = 1;
+                            }
 
                             Message out_msg;
                             out_msg.type = MSG_TYPE_OBSTACLES;
@@ -804,13 +834,11 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // 4. THROTTLING
-        // Senza select, questo while girerebbe milioni di volte al secondo (CPU 100%).
-        // Mettiamo un piccolo sleep per dare respiro alla CPU (es. 10ms = ~100fps)
         usleep(10000);
 
     }
 
+    quit:
     destroy_window(win);
     free(obstacles);
     endwin();

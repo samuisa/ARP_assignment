@@ -1,8 +1,9 @@
-[2026-01-14 19:02:25] (PID 22376) [MAIN] PROGRAM STARTED
-[2026-01-14 19:02:41] (PID 22376) [MAIN] Starting in MODE: 2
-[2026-01-14 19:02:41] (PID 22376) [MAIN] Pipes created successfully
-[2026-01-14 19:02:41] (PID 22376) [MAIN] All processes started (input=22383 drone=22385 bb=22384 obst=-1 targ=-1 watchdog=-1 network=22386)
-[2026-01-14 19:02:42] (PID 22419) [BB] FDs: input=3 drone=7 obst=10 target=14 wd=18 network=21
-[2026-01-14 19:02:42] (PID 22419) [BB] PID published securely
-[2026-01-14 19:02:42] (PID 22419) [BB] Window Resized to: 99x24
-[2026-01-14 19:02:42] (PID 22419) [BB] Ready and GUI started
+[2026-01-15 14:42:05] (PID 16284) [MAIN] PROGRAM STARTED
+[2026-01-15 14:42:20] (PID 16284) [MAIN] Starting in MODE: 2
+[2026-01-15 14:42:20] (PID 16284) [MAIN] Pipes created successfully
+[2026-01-15 14:42:20] (PID 16284) [MAIN] All processes started (input=16288 drone=16290 bb=16289 obst=-1 targ=-1 watchdog=-1 network=16291)
+[2026-01-15 14:42:20] (PID 16325) [BB] FDs: input=3 drone=7 obst=10 target=14 wd=18 network=21
+[2026-01-15 14:42:20] (PID 16325) [BB] PID published securely
+[2026-01-15 14:42:20] (PID 16325) [BB] Window Resized to: 102x31
+[2026-01-15 14:42:20] (PID 16325) [BB] Ready and GUI started
+[2026-01-15 14:42:20] (PID 16290) [DRONE] Spawned at 5.00 5.00

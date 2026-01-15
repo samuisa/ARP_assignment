@@ -173,8 +173,15 @@ int main(int argc, char *argv[]) {
                     free(arr);
                 }
             }
+            else if(msg.type == MSG_TYPE_EXIT){
+
+                logMessage(LOG_PATH, "[DRONE] Received EXIT signal. Shutting down.");
+                goto quit; // Salta direttamente alla pulizia
+                
+            }
         }
     }
+    quit:
     close(fd_in);
     close(fd_out);
     return 0;

@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <time.h>
+#include <math.h>
 #include <signal.h>
 #include <sys/socket.h>
 #include <sys/select.h> 
@@ -23,6 +24,7 @@
 #include "log.h"
 
 #define BUFSZ 1024 
+static float alpha = 0.0f;
 
 // --- STATI DEL PROTOCOLLO ---
 typedef enum {
@@ -68,6 +70,43 @@ const char* state_to_str(NetState s) {
     }
 }
 
+
+void local_to_virt(float lx, float ly, float *vx, float *vy) { 
+    // Input: lx, ly (Locali Ncurses: 0,0 in alto a sx)
+    float x = lx;
+    float y = ly; 
+
+    // Applica rotazione SOLO se necessaria (se alpha != 0)
+    if(alpha != 0.0f) {
+        float cos_a = cosf(alpha);
+        float sin_a = sinf(alpha);
+        float temp_x = x * cos_a - y * sin_a;
+        float temp_y = x * sin_a + y * cos_a;
+        x = temp_x;
+        y = temp_y;
+    }
+    *vx = x;
+    *vy = y;
+}
+
+void virt_to_local(float vx, float vy, float *lx, float *ly) { 
+    // Input: vx, vy (Virtuali)
+    float x = vx;
+    float y = vy;
+
+    // Applica rotazione inversa SOLO se necessaria
+    if(alpha != 0.0f) {
+        float cos_a = cosf(-alpha);
+        float sin_a = sinf(-alpha);
+        float temp_x = x * cos_a - y * sin_a;
+        float temp_y = x * sin_a + y * cos_a;
+        x = temp_x;
+        y = temp_y;
+    }
+    *lx = x;
+    *ly = y;
+}
+
 void set_nonblocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags != -1) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -99,8 +138,6 @@ void send_msg(int fd, const char *fmt, ...) {
     }
 
     // 4. WRITE: Scriviamo 'len' byte. 
-    // Se buf è "ciao\n\0", len è 5. Write invia 'c','i','a','o','\n'.
-    // Il terminatore '\0' NON viene inviato.
     ssize_t sent = write(fd, buf, len);
     
     if (sent < 0) {
@@ -120,8 +157,6 @@ int read_socket_chunk(int fd) {
     ssize_t n = read(fd, sock_buf.data + sock_buf.len, BUFSZ - 1 - sock_buf.len);
     if (n > 0) {
         sock_buf.len += n;
-        // Aggiungiamo \0 SOLO per permettere a strchr di funzionare localmente.
-        // Questo \0 non viene dalla rete (che manda solo \n).
         sock_buf.data[sock_buf.len] = '\0';
         return 1; 
     }
@@ -235,16 +270,13 @@ int protocol_handshake(int mode, int fd, int *w, int *h, int fd_bb_out) {
     char buf[BUFSZ];
     logMessage(LOG_PATH_SC, "[HANDSHAKE] Start Mode: %s", mode == MODE_SERVER ? "SERVER" : "CLIENT");
     
-    // NOTA: send_msg aggiunge \n automaticamente.
-    // read_line_blocking legge fino a \n e lo scarta.
-    
     if (mode == MODE_SERVER) {
-        send_msg(fd, "ok"); // Invia "ok\n"
+        send_msg(fd, "ok"); 
         if (read_line_blocking(fd, buf, sizeof(buf)) <= 0 || strcmp(buf, "ook") != 0) {
             logMessage(LOG_PATH_SC, "[HANDSHAKE] Error: Expected 'ook', got '%s'", buf);
             return -1;
         }
-        send_msg(fd, "size %d %d", *w, *h); // Invia "size w h\n"
+        send_msg(fd, "size %d %d", *w, *h); 
         if (read_line_blocking(fd, buf, sizeof(buf)) <= 0 || sscanf(buf, "sok %d %d", w, h) != 2) {
              logMessage(LOG_PATH_SC, "[HANDSHAKE] Error: Expected 'sok', got '%s'", buf);
              return -1;
@@ -254,13 +286,13 @@ int protocol_handshake(int mode, int fd, int *w, int *h, int fd_bb_out) {
             logMessage(LOG_PATH_SC, "[HANDSHAKE] Error: Expected 'ok', got '%s'", buf);
             return -1;
         }
-        send_msg(fd, "ook"); // Invia "ook\n"
+        send_msg(fd, "ook"); 
         if (read_line_blocking(fd, buf, sizeof(buf)) <= 0 || sscanf(buf, "size %d %d", w, h) != 2) {
              logMessage(LOG_PATH_SC, "[HANDSHAKE] Error: Expected 'size', got '%s'", buf);
              return -1;
         }
         send_window_size(fd_bb_out, *w, *h);
-        send_msg(fd, "sok %d %d", *w, *h); // Invia "sok w h\n"
+        send_msg(fd, "sok %d %d", *w, *h); 
     }
     
     net_state = (mode == MODE_SERVER) ? SV_SEND_CMD_DRONE : CL_WAIT_COMMAND;
@@ -272,7 +304,10 @@ int protocol_handshake(int mode, int fd, int *w, int *h, int fd_bb_out) {
 
 void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
     char net_line[BUFSZ];
+    // FIX: Variables declared here
     float rx, ry; 
+    float vx, vy; 
+    float remote_x, remote_y;
     Message msg; 
     fd_set read_fds;
     struct timeval timeout; 
@@ -316,7 +351,10 @@ void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
                         state_changed = 1; 
                         break;
                     case SV_SEND_DATA_DRONE:
-                        send_msg(net_fd, "%f %f", my_last_x, my_last_y);
+                        // Convert Local to Virtual
+                        local_to_virt(my_last_x, my_last_y, &vx, &vy);
+                        // FIX: Send Virtual coordinates (vx, vy), not local
+                        send_msg(net_fd, "%f %f", vx, vy);
                         net_state = SV_WAIT_DOK;
                         break;
                     case SV_WAIT_DOK:
@@ -337,7 +375,10 @@ void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
                             if (sscanf(net_line, "%f %f", &rx, &ry) == 2) {
                                 logMessage(LOG_PATH_SC, "[SV] << Obst Data");
                                 msg.type = MSG_TYPE_DRONE;
-                                snprintf(msg.data, sizeof(msg.data), "%f %f", rx, ry);
+                                // Convert received Virtual to Local for display
+                                virt_to_local(rx, ry, &remote_x, &remote_y);
+                                // FIX: Write Local coordinates (remote_x, remote_y) to BB
+                                snprintf(msg.data, sizeof(msg.data), "%f %f", remote_x, remote_y);
                                 write(fd_bb_out, &msg, sizeof(msg));
                                 send_msg(net_fd, "pok %f %f", rx, ry);
                                 net_state = SV_SEND_CMD_DRONE;
@@ -345,6 +386,7 @@ void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
                             }
                         }
                         break;
+                    default: break; // FIX: Handled unhandled switch cases
                 }
             } else { // CLIENT
                 switch (net_state) {
@@ -366,7 +408,10 @@ void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
                         if (get_line_from_buffer(net_line, sizeof(net_line))) {
                             if (sscanf(net_line, "%f %f", &rx, &ry) == 2) {
                                 msg.type = MSG_TYPE_DRONE;
-                                snprintf(msg.data, sizeof(msg.data), "%f %f", rx, ry);
+                                // Convert received Virtual to Local for display
+                                virt_to_local(rx, ry, &remote_x, &remote_y);
+                                // FIX: Write Local coordinates to BB
+                                snprintf(msg.data, sizeof(msg.data), "%f %f", remote_x, remote_y);
                                 write(fd_bb_out, &msg, sizeof(msg));
                                 send_msg(net_fd, "dok %f %f", rx, ry);
                                 net_state = CL_WAIT_COMMAND;
@@ -374,7 +419,10 @@ void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
                         }
                         break;
                     case CL_SEND_OBST_DATA:
-                        send_msg(net_fd, "%f %f", my_last_x, my_last_y);
+                        // Convert Local to Virtual
+                        local_to_virt(my_last_x, my_last_y, &vx, &vy);
+                        // FIX: Send Virtual coordinates
+                        send_msg(net_fd, "%f %f", vx, vy);
                         net_state = CL_WAIT_POK;
                         break;
                     case CL_WAIT_POK:
@@ -385,6 +433,7 @@ void network_loop(int mode, int fd_bb_in, int fd_bb_out) {
                             }
                         }
                         break;
+                    default: break; // FIX: Handled unhandled switch cases
                 }
             }
         } while (state_changed);
