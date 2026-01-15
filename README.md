@@ -1,4 +1,4 @@
-# ARP_assignment1
+# ARP_PROJECT
 This project implements a simulation of a drone moving in a 2D environment.
 
 The system supports two operating modes:
